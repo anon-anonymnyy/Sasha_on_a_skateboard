@@ -151,7 +151,27 @@ func _load_save() -> void:
 			for k in stats.keys():
 				stats[k] = st.get(k, stats[k])
 
+var save_dirty := false
+var save_wait := 0.0
+
 func _save() -> void:
+	save_dirty = true
+
+func _save_tick(d: float) -> void:
+	if not save_dirty:
+		return
+	save_wait += d
+	if save_wait >= 4.0:
+		_save_now()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		if save_dirty:
+			_save_now()
+
+func _save_now() -> void:
+	save_dirty = false
+	save_wait = 0.0
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
@@ -289,7 +309,7 @@ func _build_world() -> void:
 	var ground := _box(Vector3(0, -0.5, 0), Vector3(400, 1, 400), Color(0.35, 0.62, 0.3))
 	_skin(ground, "grass", 6.0)
 	# дорожка во дворе, тротуар, дорога «Липовая»
-	_skin(_box(Vector3(0, 0.02, 4), Vector3(3, 0.04, 12), Color.WHITE, false), "pave", 3.0)
+	_skin(_box(Vector3(0, 0.02, 3), Vector3(3, 0.04, 14), Color.WHITE, false), "pave", 3.0)
 	_skin(_box(Vector3(0, 0.02, 12), Vector3(200, 0.04, 4), Color.WHITE), "pave", 4.0)
 	_skin(_box(Vector3(0, 0.02, 20), Vector3(200, 0.04, 10), Color.WHITE), "asphalt", 6.0)
 	for i in range(-9, 10):
@@ -318,10 +338,14 @@ func _build_world() -> void:
 		if i == 0:
 			continue
 		if i != 3 and i != 4 and i != -3:
-			if not _house_tex(i * 22.0, -9.0, 7.5 + float(absi(i) % 2) * 1.5, 1.0, HUES[(i + 8) % HUES.size()]):
+			if _new_house(HM_LIST[(i + 8) % HM_LIST.size()], i * 22.0, -9.0, 1.0):
+				pass
+			elif not _house_tex(i * 22.0, -9.0, 7.5 + float(absi(i) % 2) * 1.5, 1.0, HUES[(i + 8) % HUES.size()]):
 				_house(i * 22.0, -9.0, 10, 7, 4.2 + (i % 2) * 0.8, wc[absi(i) % 4], Color(0.35, 0.25, 0.25), 1.0)
 		if i != -3 and i != -2:
-			if not _house_tex(i * 22.0 + 6, 36.0, 8.0 + float(absi(i) % 3) * 0.6, -1.0, HUES[(i + 11) % HUES.size()]):
+			if _new_house(HM_LIST[(i + 11) % HM_LIST.size()], i * 22.0 + 6, 37.5, -1.0):
+				pass
+			elif not _house_tex(i * 22.0 + 6, 36.0, 8.0 + float(absi(i) % 3) * 0.6, -1.0, HUES[(i + 11) % HUES.size()]):
 				_house(i * 22.0 + 6, 36.0, 10, 7, 5.0, wc[(absi(i) + 1) % 4], Color(0.3, 0.3, 0.38), -1.0)
 	_build_market()
 	_build_shop()
@@ -359,6 +383,18 @@ func _build_world() -> void:
 		coin_nodes.append(pivot)
 
 func _grandma_house() -> void:
+	var rn := _pack_node("lipovaya", "house_ranch")
+	if rn != null:
+		var o := Vector3(-2.7, 0, -9)
+		rn.position = o
+		add_child(rn)
+		# корпус, гараж, крыльцо (пол 0.95) и пандус на ступеньки
+		_col_boxr(o, 0.0, Vector3(0, 3.5, -1.5), Vector3(16.6, 7.0, 6.6), 0.0, 1.0)
+		_col_boxr(o, 0.0, Vector3(-4.65, 3.5, 2.6), Vector3(7.3, 7.0, 1.6), 0.0, 1.0)
+		_col_boxr(o, 0.0, Vector3(6.65, 3.5, 2.6), Vector3(3.3, 7.0, 1.6), 0.0, 1.0)
+		_col_boxr(o, 0.0, Vector3(2.0, 0.475, 2.85), Vector3(5.0, 0.95, 2.1), 0.0, 1.0)
+		_col_boxr(o, 0.0, Vector3(2.7, 0.4, 4.65), Vector3(2.4, 0.2, 1.8), atan2(0.95, 1.5), 1.0)
+		return
 	var path := "res://house_sasha.glb"
 	var sc: PackedScene = null
 	if ResourceLoader.exists(path):
@@ -691,7 +727,7 @@ func _hud_draw() -> void:
 	hud.draw_rect(Rect2(20, 20, 260, 56), Color(0, 0, 0, 0.45), true)
 	_text("%d ₽" % coins, Vector2(36, 60), 34, Color(1, 0.9, 0.3))
 	_text(_district(), Vector2(22, 100), 24, Color(1, 1, 1, 0.8))
-	_text("FPS %d" % Engine.get_frames_per_second(), Vector2(22, 130), 20, Color(1, 1, 1, 0.6))
+	_text("FPS %d  пик %d мс" % [Engine.get_frames_per_second(), int(ft_show * 1000.0)], Vector2(22, 130), 20, Color(1, 1, 1, 0.6))
 	hud.draw_rect(_btn_swap(), Color(0, 0, 0, 0.45), true)
 	_text_c("Сменить", _btn_swap().get_center(), 26)
 	hud.draw_rect(_btn_snd(), Color(0, 0, 0, 0.45), true)
@@ -771,7 +807,7 @@ func _draw_house_panel(s: Vector2) -> void:
 	var pr := _pr()
 	hud.draw_rect(pr, Color(0.2, 0.22, 0.32), true)
 	hud.draw_rect(pr, Color(1, 0.85, 0.3), false, 4.0)
-	_text_c("Дом бабушки", Vector2(pr.get_center().x, pr.position.y + 40), 38)
+	_text_c("Наш дом", Vector2(pr.get_center().x, pr.position.y + 40), 38)
 	hud.draw_rect(_pr_close(), Color(0.7, 0.2, 0.2), true)
 	_text_c("Закрыть", _pr_close().get_center(), 20)
 	_text("Доход: %d ₽/час (копится до %d ч)" % [_income_h(), int(MAX_OFFLINE_H)], Vector2(pr.position.x + 24, pr.position.y + 100), 24, Color(0.85, 0.9, 1))
@@ -953,7 +989,7 @@ const MM_SIZE := 170.0
 const MM_SCALE := 1.3
 const L_PTS := [Vector3(-60, 0, 13), Vector3(-42, 0, 27), Vector3(-26, 0, 13), Vector3(-10, 0, 27), Vector3(8, 0, 13)]
 const CAR_POS := Vector3(-60, 0, 35)
-const DOOR_POS := Vector3(-1.3, 0, -1.0)
+const DOOR_POS := Vector3(0.0, 0, -3.6)
 const THUG_WP := [Vector3(-47, 0.04, 35.5), Vector3(-47, 0.04, 31.0), Vector3(-38, 0.04, 22.0), Vector3(0, 0.04, 22.0), Vector3(40, 0.04, 22.0), Vector3(40, 0.04, 17.0), Vector3(0, 0.04, 17.0), Vector3(-40, 0.04, 17.0), Vector3(-47, 0.04, 31.0)]
 const TP := [["Двор", Vector3(0, 0.5, 6)], ["Рынок", Vector3(-50, 0.5, 31)], ["Скейт-парк", Vector3(80, 0.5, 6)], ["Зал Пака", Vector3(33, 0.5, 2)], ["Порт", Vector3(-5, 0.5, 66)]]
 const DOJO := Vector3(33, 0, -9)
@@ -977,7 +1013,7 @@ const OBJ := [
 	"Вернись к дяде Гоше за новой работой",
 	"Горячая доставка: отвези пирожки тёте Люде! Осталось %d с",
 	"Помой машину дяди Гоши на рынке (%d/14)",
-	"Заплати за свет: %d ₽ у двери бабушкиного дома",
+	"Заплати за свет: %d ₽ у двери нашего дома",
 	"Сходи к Кеше в скейт-шоп (дом далеко слева)",
 	"Купи колёса у Кеши (500 ₽)",
 	"Беги к дяде Гоше: на рынке беда!",
@@ -1009,7 +1045,7 @@ const DLG := {
 		["Тётя Люда", "А ещё у дяди Гоши на рынке машина вся в грязи. Он давно просит помыть. Сходи, заработаешь."]],
 	"wash_ok": [
 		["Саша", "Блестит как новая! Теперь можно думать про свет."],
-		["Саша", "Нужно накопить на оплату и идти к двери бабушкиного дома. Монеты на улице тоже помогут."]],
+		["Саша", "Нужно накопить на оплату и идти к двери нашего дома. Монеты на улице тоже помогут."]],
 	"light_ok": [
 		["Саша", "Щёлк! Свет! Чайник! Холодильник! Никогда так не радовался электричеству."],
 		["Саша", "Дом теперь приносит немного денег. А скейт совсем облысел: колёса стёрты. Надо к Кеше."]],
@@ -1123,12 +1159,21 @@ func _build_market() -> void:
 			_box(CAR_POS + Vector3(wx, 0.3, wz), Vector3(0.7, 0.6, 0.25), Color(0.1, 0.1, 0.1), false)
 
 func _build_shop() -> void:
-	if not _house_tex(-66, -9, 9.0, 1.0, 0.38):
-		_house(-66, -9, 10, 7, 4.5, Color(0.3, 0.35, 0.5), Color(0.2, 0.2, 0.25), 1.0)
-	_label("СКЕЙТ-ШОП КЕШИ", Vector3(-66, 3.7, -5.3), 120, Color(1, 0.85, 0.2), 0.009)
+	var sz := -5.4
+	if _new_house("house_modern2", -66, -9, 1.0):
+		sz = -3.25
+		# вывеска на двух столбах перед домом
+		_box(Vector3(-69.2, 1.3, -1.6), Vector3(0.14, 2.6, 0.14), Color(0.35, 0.22, 0.12), false)
+		_box(Vector3(-62.8, 1.3, -1.6), Vector3(0.14, 2.6, 0.14), Color(0.35, 0.22, 0.12), false)
+		_box(Vector3(-66, 2.3, -1.6), Vector3(6.6, 0.9, 0.1), Color(0.15, 0.17, 0.22), false)
+		_label("СКЕЙТ-ШОП КЕШИ", Vector3(-66, 2.3, -1.53), 120, Color(1, 0.85, 0.2), 0.009)
+	else:
+		if not _house_tex(-66, -9, 9.0, 1.0, 0.38):
+			_house(-66, -9, 10, 7, 4.5, Color(0.3, 0.35, 0.5), Color(0.2, 0.2, 0.25), 1.0)
+		_label("СКЕЙТ-ШОП КЕШИ", Vector3(-66, 3.7, -5.3), 120, Color(1, 0.85, 0.2), 0.009)
 	var bc := [Color(0.85, 0.25, 0.2), Color(0.2, 0.6, 0.85), Color(0.9, 0.7, 0.15), Color(0.3, 0.7, 0.4)]
 	for k in range(4):
-		_box(Vector3(-70.2 + k * 1.1, 1.6, -5.4), Vector3(0.45, 1.5, 0.06), bc[k], false)
+		_box(Vector3(-70.2 + k * 1.1, 1.6, sz - 0.1), Vector3(0.45, 1.5, 0.06), bc[k], false)
 
 func _build_story() -> void:
 	for id in NPC_DEF.keys():
@@ -2376,7 +2421,9 @@ var bag_sway := 0.0
 var bag_t := 0.0
 
 func _build_dojo() -> void:
-	if not _house_tex(DOJO.x, DOJO.z, 8.0, 1.0, -0.17):
+	if _new_house("house_bungalow", DOJO.x, DOJO.z, 1.0):
+		pass
+	elif not _house_tex(DOJO.x, DOJO.z, 8.0, 1.0, -0.17):
 		_house(DOJO.x, DOJO.z, 9, 7, 4.5, Color(0.93, 0.9, 0.82), Color(0.65, 0.15, 0.15), 1.0)
 	_box(Vector3(DOJO.x - 3.8, 1.2, DOJO.z + 5.6), Vector3(0.14, 2.4, 0.14), Color(0.35, 0.22, 0.12), false)
 	_box(Vector3(DOJO.x - 3.8, 2.5, DOJO.z + 5.6), Vector3(2.8, 0.8, 0.1), Color(0.55, 0.12, 0.12), false)
@@ -2544,6 +2591,51 @@ func _col_boxr(origin: Vector3, rot_y: float, off: Vector3, size: Vector3, rot_x
 	cs.shape = sh
 	sb.add_child(cs)
 	add_child(sb)
+
+const HM := {
+	"house_ranch": [17.0, 7.33, 10.17, 2.7],
+	"house_bungalow": [15.0, 7.02, 9.47, 2.0],
+	"house_farm": [18.0, 8.05, 10.16, 2.0],
+	"house_modern2": [15.0, 7.94, 11.31, 2.5],
+	"house_capecod": [12.0, 7.66, 10.03, 0.9],
+	"house_yellow2": [12.0, 13.71, 11.96, 0.0],
+}
+const HM_LIST := ["house_bungalow", "house_farm", "house_modern2", "house_capecod", "house_yellow2", "house_ranch"]
+var pack_cache := {}
+
+func _pack_node(pack: String, node_name: String) -> Node3D:
+	if not pack_cache.has(pack):
+		var path := "res://pack_%s.glb" % pack
+		var root: Node = null
+		if ResourceLoader.exists(path):
+			var ps = load(path)
+			if ps is PackedScene:
+				root = (ps as PackedScene).instantiate()
+		pack_cache[pack] = root
+	var r = pack_cache[pack]
+	if r == null:
+		return null
+	var n: Node = r.find_child(node_name, true, false)
+	if n == null:
+		return null
+	var c := n.duplicate() as Node3D
+	if c is MeshInstance3D:
+		(c as MeshInstance3D).visibility_range_end = 130.0
+	return c
+
+func _new_house(model: String, x: float, z: float, face_z: float) -> bool:
+	var n := _pack_node("lipovaya", model)
+	if n == null:
+		return false
+	var hd: Array = HM[model]
+	n.position = Vector3(x, 0, z)
+	n.rotation.y = 0.0 if face_z > 0.0 else PI
+	add_child(n)
+	var sgn := 1.0 if face_z > 0.0 else -1.0
+	house_doors.append(Vector3(x + float(hd[3]) * sgn, 0.0, z))
+	var ry := 0.0 if face_z > 0.0 else PI
+	_col_boxr(Vector3(x, 0, z), ry, Vector3(0, float(hd[1]) * 0.5, -0.5), Vector3(float(hd[0]) - 0.8, float(hd[1]), float(hd[2]) - 1.8), 0.0, 1.0)
+	return true
 
 func _house_tex(x: float, z: float, sc: float, face_z: float, hue: float) -> bool:
 	if house_scene == null:
@@ -3144,38 +3236,83 @@ func _lp_noise(n: int, lp: float) -> PackedFloat32Array:
 		out[i] = y
 	return out
 
+func _loopify(sig: PackedFloat32Array, n: int) -> PackedFloat32Array:
+	var m := sig.size() - n
+	var o := PackedFloat32Array()
+	o.resize(n)
+	for i in range(n):
+		if i < m:
+			var u := float(i) / float(m)
+			o[i] = sig[i] * sqrt(u) + sig[n + i] * sqrt(1.0 - u)
+		else:
+			o[i] = sig[i]
+	return o
+
+func _norm(o: PackedFloat32Array, peak: float) -> void:
+	var mx := 0.0001
+	for i in range(o.size()):
+		mx = maxf(mx, absf(o[i]))
+	var k := peak / mx
+	for i in range(o.size()):
+		o[i] *= k
+
 func _amb_wind() -> PackedFloat32Array:
 	var n := int(6.0 * float(SR))
-	var o := _lp_noise(n, 0.03)
-	for i in range(n):
+	var m := int(1.0 * float(SR))
+	var o := _lp_noise(n + m, 0.03)
+	for i in range(n + m):
 		var t := float(i) / float(SR)
 		o[i] *= (0.7 + 0.3 * sin(TAU * t / 6.0) + 0.15 * sin(TAU * t / 3.0)) * 3.0
-	return o
+	var r := _loopify(o, n)
+	_norm(r, 0.45)
+	return r
 
 func _amb_crowd() -> PackedFloat32Array:
 	var n := int(4.0 * float(SR))
-	var a := _lp_noise(n, 0.22)
-	var b := _lp_noise(n, 0.04)
+	var m := int(0.5 * float(SR))
+	var a := _lp_noise(n + m, 0.22)
+	var b := _lp_noise(n + m, 0.04)
 	var o := PackedFloat32Array()
-	o.resize(n)
-	for i in range(n):
+	o.resize(n + m)
+	for i in range(n + m):
 		var t := float(i) / float(SR)
 		var am := 0.5 + 0.5 * absf(sin(TAU * t * 1.75)) * (0.65 + 0.35 * sin(TAU * t * 0.5 + 1.0))
 		o[i] = (a[i] - b[i]) * am * 2.2
-	return o
+	var r := _loopify(o, n)
+	_norm(r, 0.5)
+	return r
+
+# Море: волны накатывают и отступают, шум темнеет и светлеет вместе с волной
+const SEA_R := 11025
 
 func _amb_sea() -> PackedFloat32Array:
-	var n := int(8.0 * float(SR))
-	var a := _lp_noise(n, 0.07)
-	var b := _lp_noise(n, 0.4)
+	var rate := float(SEA_R)
+	var n := int(20.0 * rate)
+	var m := int(2.0 * rate)
 	var o := PackedFloat32Array()
-	o.resize(n)
-	for i in range(n):
-		var t := float(i) / float(SR)
-		var w := 0.5 + 0.5 * sin(TAU * t / 8.0 - 1.0)
-		var w2 := 0.5 + 0.5 * sin(TAU * t / 4.0)
-		o[i] = a[i] * (0.4 + 0.9 * w * w) * 3.2 + b[i] * 0.25 * w * w2
-	return o
+	o.resize(n + m)
+	var y1 := 0.0
+	var y2 := 0.0
+	var h1 := 0.0
+	var rb := 0.0
+	for i in range(n + m):
+		var t := float(i) / rate
+		var w1 := 0.5 + 0.5 * sin(TAU * t / (20.0 / 3.0) - 1.2)
+		var w2 := 0.5 + 0.5 * sin(TAU * t / 10.0 + 0.7)
+		var w3 := 0.5 + 0.5 * sin(TAU * t / 4.0 + 2.1)
+		var e := clampf(0.5 * w1 * w1 + 0.38 * w2 * w2 + 0.12 * w3, 0.0, 1.0)
+		var x := randf() * 2.0 - 1.0
+		var lp := 0.07 + 0.33 * e
+		y1 += lp * (x - y1)
+		y2 += lp * (y1 - y2)
+		var body := y2 * (1.0 / sqrt(lp)) * (0.12 + 0.88 * e)
+		h1 += 0.25 * (x - h1)
+		var foam := (x - h1) * e * e * 0.6
+		rb += 0.03 * (x - rb)
+		o[i] = body * 0.5 + foam * 0.35 + rb * 1.2
+	var r := _loopify(o, n)
+	_norm(r, 0.5)
+	return r
 
 func _amb_gull() -> PackedFloat32Array:
 	var n := int(1.0 * float(SR))
@@ -3273,7 +3410,7 @@ var amb_thread: Thread
 
 func _gen_audio() -> Dictionary:
 	return {"gull": _wav(_amb_gull(), SR), "horn": _wav(_amb_horn(), SR), "car": _wav(_amb_car(), SR),
-		"wind": _wav(_amb_wind(), SR, true), "crowd": _wav(_amb_crowd(), SR, true), "sea": _wav(_amb_sea(), SR, true),
+		"wind": _wav(_amb_wind(), SR, true), "crowd": _wav(_amb_crowd(), SR, true), "sea": _wav(_amb_sea(), SEA_R, true),
 		"music": _make_chill()}
 
 func _build_ambient() -> void:
@@ -3580,7 +3717,18 @@ func _physics_process(d: float) -> void:
 	else:
 		_play("idle")
 
+var ft_max := 0.0
+var ft_show := 0.0
+var ft_acc := 0.0
+
 func _process(d: float) -> void:
+	_save_tick(d)
+	ft_max = maxf(ft_max, d)
+	ft_acc += d
+	if ft_acc >= 5.0:
+		ft_show = ft_max
+		ft_max = 0.0
+		ft_acc = 0.0
 	toast_t = maxf(0.0, toast_t - d)
 	_roll_update()
 	for i in range(coin_nodes.size()):
