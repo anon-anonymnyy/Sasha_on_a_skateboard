@@ -325,13 +325,13 @@ func _build_world() -> void:
 	fence_mats.append((_box(Vector3(-8.75, 0.6, 10), Vector3(12.5, 1.2, 0.15), fc)).get_child(0).material_override)
 	fence_mats.append((_box(Vector3(8.75, 0.6, 10), Vector3(12.5, 1.2, 0.15), fc)).get_child(0).material_override)
 	# деревья
-	_tree(-12, 4, 4.5)
-	_tree(11, -6, 5.0)
-	_tree(12, 6, 4.0)
-	_tree(-13.2, -13, 4.5)
+	_tree_or("tree_linden", -12, 4, 4.5, 0.8)
+	_tree_or("tree_maple", 11, -6, 5.0, 0.8)
+	_tree_or("tree_linden", 12, 6, 4.0, 0.7)
+	_tree_or("tree_spruce", -13.2, -13, 4.5, 0.7)
 	for i in range(-6, 7):
 		if i % 2 == 0:
-			_tree(i * 14.0, 14.5, 4.0)
+			_tree_or("tree_maple" if (i / 2) % 2 == 0 else "tree_linden", i * 14.0, 14.5, 4.0, 0.75)
 	# соседние дома
 	var wc := [Color(0.85, 0.6, 0.55), Color(0.6, 0.75, 0.85), Color(0.9, 0.85, 0.5), Color(0.7, 0.85, 0.65)]
 	for i in range(-4, 5):
@@ -349,6 +349,8 @@ func _build_world() -> void:
 				_house(i * 22.0 + 6, 36.0, 10, 7, 5.0, wc[(absi(i) + 1) % 4], Color(0.3, 0.3, 0.38), -1.0)
 	_build_market()
 	_build_shop()
+	_build_city()
+	_mailbox(8.0, 11.7, 0.0)
 	# скейт-элементы во дворе
 	_box(Vector3(6, 0.45, 3), Vector3(3, 0.3, 4), Color(0.7, 0.55, 0.35), true, Vector3(0.26, 0, 0))
 	_box(Vector3(-7, 0.3, 4), Vector3(4, 0.6, 3), Color(0.6, 0.6, 0.65))
@@ -991,7 +993,7 @@ const L_PTS := [Vector3(-60, 0, 13), Vector3(-42, 0, 27), Vector3(-26, 0, 13), V
 const CAR_POS := Vector3(-60, 0, 35)
 const DOOR_POS := Vector3(0.0, 0, -3.6)
 const THUG_WP := [Vector3(-47, 0.04, 35.5), Vector3(-47, 0.04, 31.0), Vector3(-38, 0.04, 22.0), Vector3(0, 0.04, 22.0), Vector3(40, 0.04, 22.0), Vector3(40, 0.04, 17.0), Vector3(0, 0.04, 17.0), Vector3(-40, 0.04, 17.0), Vector3(-47, 0.04, 31.0)]
-const TP := [["Двор", Vector3(0, 0.5, 6)], ["Рынок", Vector3(-50, 0.5, 31)], ["Скейт-парк", Vector3(80, 0.5, 6)], ["Зал Пака", Vector3(33, 0.5, 2)], ["Порт", Vector3(-5, 0.5, 66)]]
+const TP := [["Двор", Vector3(0, 0.5, 6)], ["Рынок", Vector3(-50, 0.5, 31)], ["Скейт-парк", Vector3(80, 0.5, 6)], ["Зал Пака", Vector3(33, 0.5, 2)], ["Порт", Vector3(-5, 0.5, 66)], ["Сити", Vector3(-78, 0.5, -54)]]
 const DOJO := Vector3(33, 0, -9)
 const BAG_POS := Vector3(38.2, 0, -3.2)
 const SPAR_START := Vector3(41, 0.04, 6)
@@ -1524,6 +1526,8 @@ func _district() -> String:
 		return "Ромашка"
 	if p.x < -28.0 and p.z > 30.0:
 		return "Рынок"
+	if p.z < -45.0 and p.x < -28.0 and p.x > -125.0:
+		return "Сити"
 	return "Липовая"
 
 # ---------------- мини-карта ----------------
@@ -1552,6 +1556,16 @@ func _mini_draw() -> void:
 	_mm_rect(-8.5, 30, -1.5, 62, Color(0.25, 0.25, 0.28))
 	_mm_rect(-40, 62, 70, 104, Color(0.62, 0.63, 0.65))
 	_mm_rect(54, -31, 106, 11, Color(0.6, 0.6, 0.66))
+	_mm_rect(-81, -50, -75, 12, Color(0.25, 0.25, 0.28))
+	_mm_rect(-124, -126, -32, -50, Color(0.62, 0.6, 0.55))
+	_mm_rect(-107, -121, -97, -112, Color(0.55, 0.3, 0.3))
+	_mm_rect(-81, -121, -75, -115, Color(0.85, 0.75, 0.4))
+	_mm_rect(-59, -121, -49, -111, Color(0.6, 0.45, 0.35))
+	_mm_rect(-123, -95, -111, -81, Color(0.75, 0.4, 0.3))
+	_mm_rect(-44, -98, -34, -86, Color(0.7, 0.45, 0.35))
+	_mm_rect(-112, -50, -96, -40, Color(0.6, 0.55, 0.5))
+	_mm_rect(-59, -50, -49, -42, Color(0.65, 0.4, 0.3))
+	_mm_rect(-83, -93, -73, -83, Color(0.35, 0.55, 0.75))
 	for id in npcs.keys():
 		var n: Node3D = npcs[id]["node"]
 		mini.draw_circle(_mm(n.global_position), 4.0, Color(1, 0.6, 0.2))
@@ -2635,6 +2649,10 @@ func _new_house(model: String, x: float, z: float, face_z: float) -> bool:
 	house_doors.append(Vector3(x + float(hd[3]) * sgn, 0.0, z))
 	var ry := 0.0 if face_z > 0.0 else PI
 	_col_boxr(Vector3(x, 0, z), ry, Vector3(0, float(hd[1]) * 0.5, -0.5), Vector3(float(hd[0]) - 0.8, float(hd[1]), float(hd[2]) - 1.8), 0.0, 1.0)
+	if face_z > 0.0:
+		_mailbox(x + 4.6, 11.7, 0.0)
+	else:
+		_mailbox(x - 4.6, 28.4, PI)
 	return true
 
 func _house_tex(x: float, z: float, sc: float, face_z: float, hue: float) -> bool:
@@ -2876,13 +2894,22 @@ func _bunting(a: Vector3, b: Vector3) -> void:
 func _market_extra() -> void:
 	var awn := [Color(0.85, 0.25, 0.2), Color(0.2, 0.55, 0.8), Color(0.9, 0.7, 0.15), Color(0.3, 0.65, 0.35), Color(0.7, 0.3, 0.6)]
 	var r1x := [-64.0, -57.0, -50.0, -43.0, -36.0]
-	var r1n := ["ОВОЩИ", "ХЛЕБ", "", "ФРУКТЫ", "ЦВЕТЫ"]
+	var r1n := ["ОДЕЖДА", "ФРУКТЫ", "", "ЦВЕТЫ", "ФРУКТЫ"]
+	var r1m := ["stall_clothes", "stall_fruit", "", "stall_flowers", "stall_fruit"]
 	for k in range(5):
-		_stall(float(r1x[k]), 40.0, 1.0, awn[k], str(r1n[k]), 0.12 * float(k))
+		if str(r1m[k]) == "":
+			_stall(float(r1x[k]), 40.0, 1.0, awn[k], str(r1n[k]), 0.12 * float(k))
+		else:
+			_stall_m(str(r1m[k]), float(r1x[k]), 40.0, 1.0, awn[k], str(r1n[k]), 0.12 * float(k))
 	var r2x := [-64.0, -56.0, -48.0, -40.0]
 	var r2n := ["РЫБА", "МОЛОКО", "ИГРУШКИ", "ЧАЙ"]
+	var r2m := ["stall_fish", "stall_dairy", "stall_toys", "stall_tea"]
 	for k in range(4):
-		_stall(float(r2x[k]), 54.0, -1.0, awn[(k + 2) % 5], str(r2n[k]), 0.3 + 0.1 * float(k))
+		_stall_m(str(r2m[k]), float(r2x[k]), 54.0, -1.0, awn[(k + 2) % 5], str(r2n[k]), 0.3 + 0.1 * float(k))
+	# сцена для собраний на восточном краю рынка и заграждение у входа
+	_prop("market", "stage", Vector3(-32.6, 0, 47.0), -PI / 2.0, 0.9, 110.0)
+	_prop("market", "market_barrier", Vector3(-69.5, 0, 36.5), PI / 2.0, 0.9, 90.0)
+	_prop("market", "market_barrier", Vector3(-69.5, 0, 41.0), PI / 2.0, 0.9, 90.0)
 	_bunting(Vector3(-69, 5.0, 46), Vector3(-31, 5.0, 46))
 	for px in [-69.0, -31.0]:
 		_skin(_box(Vector3(px, 2.6, 46), Vector3(0.2, 5.2, 0.2), Color.WHITE, false), "wood", 1.0)
@@ -2897,6 +2924,105 @@ func _market_extra() -> void:
 		bi.material_override = _mat(Color(0.2, 0.4, 0.7) if bp.x < -50.0 else Color(0.7, 0.25, 0.2), 0.6)
 		bi.position = bp
 		add_child(bi)
+
+# ---------- модели из паков: Сити, рынок, деревья ----------
+func _prop(pack: String, nm: String, pos: Vector3, ry := 0.0, solid := 1.0, vis := 130.0, sc := 1.0) -> Node3D:
+	var n := _pack_node(pack, nm)
+	if n == null:
+		return null
+	n.position = pos
+	n.rotation.y = ry
+	if sc != 1.0:
+		n.scale = Vector3(sc, sc, sc)
+	if n is MeshInstance3D:
+		(n as MeshInstance3D).visibility_range_end = vis
+	add_child(n)
+	if solid > 0.0 and n is MeshInstance3D:
+		var bb := (n as MeshInstance3D).get_aabb()
+		var sz := bb.size * sc
+		_col_boxr(pos, ry, bb.get_center() * sc, Vector3(sz.x * solid, sz.y, sz.z * solid), 0.0, 1.0)
+	return n
+
+func _tree_model(kind: String, x: float, z: float, sc := 1.0) -> bool:
+	var n := _prop("lipovaya", kind, Vector3(x, 0, z), fposmod(x * 1.7 + z * 0.9, TAU), 0.0, 95.0, sc)
+	if n == null:
+		return false
+	var h := 9.0 * sc
+	if n is MeshInstance3D:
+		h = (n as MeshInstance3D).get_aabb().size.y * sc
+	_col_boxr(Vector3(x, 0, z), 0.0, Vector3(0, 1.0, 0), Vector3(0.9, 2.0, 0.9), 0.0, 1.0)
+	tree_tops.append(Vector3(x, h * 0.95, z))
+	return true
+
+func _tree_or(kind: String, x: float, z: float, h: float, sc := 1.0) -> void:
+	if not _tree_model(kind, x, z, sc):
+		_tree(x, z, h)
+
+func _mailbox(x: float, z: float, ry: float) -> void:
+	_prop("lipovaya", "mailbox_street", Vector3(x, 0, z), ry, 0.7, 60.0)
+
+func _stall_m(model: String, x: float, z: float, face: float, col: Color, nm: String, hue: float) -> void:
+	var n := _prop("market", model, Vector3(x, 0, z), 0.0 if face > 0.0 else PI, 0.9, 110.0)
+	if n == null:
+		_stall(x, z, face, col, nm, hue)
+		return
+	if nm != "":
+		var hh := 3.0
+		if n is MeshInstance3D:
+			hh = (n as MeshInstance3D).get_aabb().size.y
+		_label(nm, Vector3(x, hh + 0.6, z), 64, Color(1, 1, 1), 0.011)
+
+func _lamp_post(x: float, z: float) -> void:
+	_box(Vector3(x, 2.2, z), Vector3(0.16, 4.4, 0.16), Color(0.18, 0.2, 0.22))
+	_glow_box(Vector3(x, 4.6, z), Vector3(0.55, 0.4, 0.55), Color(1.0, 0.88, 0.55))
+
+func _build_city() -> void:
+	# дорога от Липовой и площадь Сити
+	_skin(_box(Vector3(-78, 0.025, -19), Vector3(6, 0.04, 62), Color.WHITE), "asphalt", 6.0)
+	_skin(_box(Vector3(-78, 0.03, -88), Vector3(92, 0.06, 76), Color.WHITE), "cobble", 4.0)
+	# арка у въезда
+	_box(Vector3(-82.5, 2.0, -50.5), Vector3(0.3, 4.0, 0.3), Color(0.3, 0.3, 0.34), false)
+	_box(Vector3(-73.5, 2.0, -50.5), Vector3(0.3, 4.0, 0.3), Color(0.3, 0.3, 0.34), false)
+	_box(Vector3(-78, 4.0, -50.5), Vector3(9.3, 0.3, 0.3), Color(0.3, 0.3, 0.34), false)
+	_label("СИТИ", Vector3(-78, 5.2, -50.5), 160, Color(0.6, 0.85, 1.0))
+	# север: штаб Крохина, часовая башня, библиотека
+	_prop("city", "kroh_hq", Vector3(-102, 0, -116), 0.0)
+	_prop("city", "clock_tower", Vector3(-78, 0, -118), 0.0, 1.0, 420.0)
+	_prop("city", "library", Vector3(-54, 0, -116), 0.0)
+	_label("ШТАБ КРОХИНА", Vector3(-102, 17.5, -113), 100, Color(1, 0.85, 0.2), 0.011)
+	_label("БИБЛИОТЕКА", Vector3(-54, 16.5, -113), 100, Color(1, 0.85, 0.2), 0.011)
+	# запад и восток
+	_prop("city", "department_store", Vector3(-116.5, 0, -88), PI / 2.0)
+	_prop("city", "shop_ulitsa", Vector3(-39.0, 0, -92), -PI / 2.0)
+	_label("УНИВЕРМАГ", Vector3(-110.0, 11.0, -88), 100, Color(1, 0.85, 0.2), 0.011)
+	_label("МАГАЗИН «УЛИЦА»", Vector3(-44.0, 14.8, -92), 100, Color(1, 0.85, 0.2), 0.011)
+	# юг площади, лицом к фонтану
+	_prop("city", "panel5", Vector3(-104, 0, -44.5), PI)
+	_prop("city", "brick2", Vector3(-54, 0, -46.0), PI)
+	# фонтан и скамейки вокруг
+	_prop("city", "fountain", Vector3(-78, 0, -88), 0.0, 0.85)
+	_prop("city", "bench_old", Vector3(-71.2, 0, -88), -PI / 2.0, 0.9, 90.0)
+	_prop("city", "bench_old", Vector3(-84.8, 0, -88), PI / 2.0, 0.9, 90.0)
+	_prop("city", "bench_old", Vector3(-78, 0, -94.8), 0.0, 0.9, 90.0)
+	_prop("city", "bench_old", Vector3(-78, 0, -81.2), PI, 0.9, 90.0)
+	for up in [Vector3(-108, 0, -104), Vector3(-62, 0, -72), Vector3(-96, 0, -72)]:
+		_prop("city", "umbrella_table", up, fposmod(up.x, 3.0), 0.5, 90.0)
+	# лавки героя (пока декорации до акта 3)
+	_prop("heroshops", "bakery", Vector3(-35.6, 0, -66), -PI / 2.0)
+	_prop("heroshops", "delivery_point", Vector3(-35.6, 0, -114), -PI / 2.0)
+	_prop("heroshops", "skate_workshop", Vector3(-118.5, 0, -64), PI / 2.0)
+	_label("ПИРОЖКОВАЯ", Vector3(-35.6, 6.0, -66), 90, Color(1, 0.85, 0.2), 0.01)
+	_label("ПУНКТ ДОСТАВКИ", Vector3(-35.6, 5.6, -114), 90, Color(1, 0.85, 0.2), 0.01)
+	_label("МАСТЕРСКАЯ СКЕЙТОВ", Vector3(-118.5, 6.4, -64), 90, Color(1, 0.85, 0.2), 0.01)
+	# деревья и фонари
+	var ck := ["tree_linden", "tree_maple", "tree_maple", "tree_linden", "tree_linden", "tree_maple"]
+	var cp := [Vector2(-92, -76), Vector2(-64, -76), Vector2(-92, -101), Vector2(-64, -101), Vector2(-92, -56), Vector2(-64, -56)]
+	for k in range(6):
+		_tree_or(str(ck[k]), (cp[k] as Vector2).x, (cp[k] as Vector2).y, 7.0, 0.85)
+	for lp in [Vector2(-110, -70), Vector2(-46, -70), Vector2(-110, -106), Vector2(-46, -106), Vector2(-86, -58), Vector2(-70, -58), Vector2(-78, -110)]:
+		_lamp_post((lp as Vector2).x, (lp as Vector2).y)
+	# скамейка и ящик у въезда
+	_prop("lipovaya", "bench_modern", Vector3(-85, 0, -40), PI / 2.0, 0.9, 80.0)
 
 # ---------- заборы и кусты ----------
 var bush_mesh: SphereMesh
@@ -2995,7 +3121,9 @@ func _build_fences() -> void:
 		else:
 			gs.append(Vector2(dd.x, 2.2))
 	gs.append(Vector2(-5.0, 4.5))
-	_fence_line(10.0, -92.0, -15.0, gn.duplicate())
+	var gcity := gn.duplicate()
+	gcity.append(Vector2(-78.0, 3.4))
+	_fence_line(10.0, -92.0, -15.0, gcity)
 	_fence_line(10.0, 15.0, 52.0, gn.duplicate())
 	_fence_line(30.7, -27.0, 100.0, gs.duplicate())
 	for d in gn:
@@ -3008,7 +3136,7 @@ func _build_fences() -> void:
 		_bush(Vector3(g2.x + g2.y + 1.0, 0.0, 31.6), 1.0 + 0.4 * _rnd(g2.x, 7.0), _rnd(g2.x, 8.0))
 	for xi in range(-88, 52, 7):
 		var xf := float(xi)
-		if absf(xf) < 16.0 or _rnd(xf, 9.0) < 0.35:
+		if absf(xf) < 16.0 or _rnd(xf, 9.0) < 0.35 or absf(xf + 78.0) < 5.0:
 			continue
 		_bush(Vector3(xf, 0.0, 8.8), 0.9 + 0.5 * _rnd(xf, 10.0), _rnd(xf, 11.0))
 	for xi in range(-24, 98, 8):
