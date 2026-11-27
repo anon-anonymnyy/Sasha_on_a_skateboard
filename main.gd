@@ -318,12 +318,11 @@ func _build_world() -> void:
 	# дом бабушки и двор
 	_grandma_house()
 	# забор
-	var fc := Color(0.55, 0.38, 0.2)
-	fence_mats.append((_box(Vector3(0, 0.6, -16.2), Vector3(30, 1.2, 0.15), fc)).get_child(0).material_override)
-	fence_mats.append((_box(Vector3(-15, 0.6, -3.1), Vector3(0.15, 1.2, 26.2), fc)).get_child(0).material_override)
-	fence_mats.append((_box(Vector3(15, 0.6, -3.1), Vector3(0.15, 1.2, 26.2), fc)).get_child(0).material_override)
-	fence_mats.append((_box(Vector3(-8.75, 0.6, 10), Vector3(12.5, 1.2, 0.15), fc)).get_child(0).material_override)
-	fence_mats.append((_box(Vector3(8.75, 0.6, 10), Vector3(12.5, 1.2, 0.15), fc)).get_child(0).material_override)
+	_yard_fence(Vector2(-15, -16.2), Vector2(15, -16.2))
+	_yard_fence(Vector2(-15, -16.2), Vector2(-15, 10))
+	_yard_fence(Vector2(15, -16.2), Vector2(15, 10))
+	_yard_fence(Vector2(-15, 10), Vector2(-2.5, 10))
+	_yard_fence(Vector2(2.5, 10), Vector2(15, 10))
 	# деревья
 	_tree_or("tree_linden", -12, 4, 4.5, 0.8)
 	_tree_or("tree_maple", 11, -6, 5.0, 0.8)
@@ -350,7 +349,6 @@ func _build_world() -> void:
 	_build_market()
 	_build_shop()
 	_build_city()
-	_mailbox(8.0, 11.7, 0.0)
 	# скейт-элементы во дворе
 	_box(Vector3(6, 0.45, 3), Vector3(3, 0.3, 4), Color(0.7, 0.55, 0.35), true, Vector3(0.26, 0, 0))
 	_box(Vector3(-7, 0.3, 4), Vector3(4, 0.6, 3), Color(0.6, 0.6, 0.65))
@@ -1122,8 +1120,10 @@ func _smax() -> float:
 		m += 1.5
 	return m
 
-func _label(t: String, pos: Vector3, fs: int, c: Color, px := 0.012) -> void:
+func _label(t: String, pos: Vector3, fs: int, c: Color, px := 0.012, vis := 0.0) -> void:
 	var lb := Label3D.new()
+	if vis > 0.0:
+		lb.visibility_range_end = vis
 	lb.text = t
 	lb.font_size = fs
 	lb.pixel_size = px
@@ -1148,17 +1148,29 @@ func _build_market() -> void:
 	_label("РЫНОК", Vector3(-50, 5.2, 31.5), 160, Color(1, 0.85, 0.2))
 	_market_extra()
 	_label("ЛАВКА У ГОШИ", Vector3(-50, 3.5, 39.0), 110, Color(1, 1, 1), 0.009)
-	for cp in [Vector3(-68, 0.4, 50), Vector3(-66.5, 0.4, 50.4), Vector3(-67.2, 1.2, 50.2), Vector3(-33, 0.4, 52), Vector3(-34.4, 0.4, 51.6)]:
-		_box(cp, Vector3(1.0, 0.8, 1.0), Color(0.62, 0.48, 0.3))
+	if _prop("market", "pallets_tarp", Vector3(-67.4, 0, 50.4), 0.3, 0.9, 70.0) != null:
+		_prop("market", "tires", Vector3(-65.4, 0, 51.4), 0.6, 0.8, 70.0)
+		_prop("market", "barrels_pallet", Vector3(-33.6, 0, 51.8), -0.3, 0.9, 70.0)
+	else:
+		for cp in [Vector3(-68, 0.4, 50), Vector3(-66.5, 0.4, 50.4), Vector3(-67.2, 1.2, 50.2), Vector3(-33, 0.4, 52), Vector3(-34.4, 0.4, 51.6)]:
+			_box(cp, Vector3(1.0, 0.8, 1.0), Color(0.62, 0.48, 0.3))
 	# машина дяди Гоши
-	car_mat = _mat(Color(0.38, 0.3, 0.22), 0.6)
-	var body := _box(CAR_POS + Vector3(0, 0.65, 0), Vector3(4.2, 0.8, 1.9), Color(0.38, 0.3, 0.22))
-	(body.get_child(0) as MeshInstance3D).material_override = car_mat
-	var cab := _box(CAR_POS + Vector3(-0.2, 1.4, 0), Vector3(2.3, 0.7, 1.7), Color(0.4, 0.5, 0.6), false)
-	(cab.get_child(0) as MeshInstance3D).material_override = car_mat
-	for wx in [-1.3, 1.3]:
-		for wz in [-0.95, 0.95]:
-			_box(CAR_POS + Vector3(wx, 0.3, wz), Vector3(0.7, 0.6, 0.25), Color(0.1, 0.1, 0.1), false)
+	var cn := _prop("vehicles", "car_blue", CAR_POS, PI / 2.0, 0.9, 90.0)
+	if cn != null and cn is MeshInstance3D:
+		var cmi := cn as MeshInstance3D
+		var sm0 := cmi.mesh.surface_get_material(0)
+		if sm0 is StandardMaterial3D:
+			car_mat = (sm0 as StandardMaterial3D).duplicate() as StandardMaterial3D
+			cmi.material_override = car_mat
+	if car_mat == null:
+		car_mat = _mat(Color(0.38, 0.3, 0.22), 0.6)
+		var body := _box(CAR_POS + Vector3(0, 0.65, 0), Vector3(4.2, 0.8, 1.9), Color(0.38, 0.3, 0.22))
+		(body.get_child(0) as MeshInstance3D).material_override = car_mat
+		var cab := _box(CAR_POS + Vector3(-0.2, 1.4, 0), Vector3(2.3, 0.7, 1.7), Color(0.4, 0.5, 0.6), false)
+		(cab.get_child(0) as MeshInstance3D).material_override = car_mat
+		for wx in [-1.3, 1.3]:
+			for wz in [-0.95, 0.95]:
+				_box(CAR_POS + Vector3(wx, 0.3, wz), Vector3(0.7, 0.6, 0.25), Color(0.1, 0.1, 0.1), false)
 
 func _build_shop() -> void:
 	var sz := -5.4
@@ -1168,7 +1180,15 @@ func _build_shop() -> void:
 		_box(Vector3(-69.2, 1.3, -1.6), Vector3(0.14, 2.6, 0.14), Color(0.35, 0.22, 0.12), false)
 		_box(Vector3(-62.8, 1.3, -1.6), Vector3(0.14, 2.6, 0.14), Color(0.35, 0.22, 0.12), false)
 		_box(Vector3(-66, 2.3, -1.6), Vector3(6.6, 0.9, 0.1), Color(0.15, 0.17, 0.22), false)
-		_label("СКЕЙТ-ШОП КЕШИ", Vector3(-66, 2.3, -1.53), 120, Color(1, 0.85, 0.2), 0.009)
+		var sl := Label3D.new()
+		sl.text = "СКЕЙТ-ШОП КЕШИ"
+		sl.font_size = 120
+		sl.pixel_size = 0.009
+		sl.position = Vector3(-66, 2.3, -1.46)
+		sl.modulate = Color(1, 0.85, 0.2)
+		sl.outline_modulate = Color(0.1, 0.1, 0.1)
+		sl.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+		add_child(sl)
 	else:
 		if not _house_tex(-66, -9, 9.0, 1.0, 0.38):
 			_house(-66, -9, 10, 7, 4.5, Color(0.3, 0.35, 0.5), Color(0.2, 0.2, 0.25), 1.0)
@@ -1184,8 +1204,9 @@ func _build_story() -> void:
 		var an := n.find_child("AnimationPlayer", true, false) as AnimationPlayer
 		npcs[id] = {"node": n, "anim": an, "ry": float(def["ry"])}
 	for p in L_PTS:
-		_box(p + Vector3(0, 0.45, 0), Vector3(0.12, 0.9, 0.12), Color(0.3, 0.3, 0.35), false)
-		_box(p + Vector3(0, 1.0, 0), Vector3(0.6, 0.4, 0.4), Color(0.2, 0.4, 0.85), false)
+		if _prop("story", "mailbox_luda", p, 0.0 if p.z < 20.0 else PI, 0.0, 70.0) == null:
+			_box(p + Vector3(0, 0.45, 0), Vector3(0.12, 0.9, 0.12), Color(0.3, 0.3, 0.35), false)
+			_box(p + Vector3(0, 1.0, 0), Vector3(0.6, 0.4, 0.4), Color(0.2, 0.4, 0.85), false)
 	tgt_node = MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	cm.top_radius = 0.7
@@ -1305,7 +1326,10 @@ func _update_car() -> void:
 		t = 1.0
 	elif story == 5:
 		t = clampf(float(sp) / 14.0, 0.0, 1.0)
-	car_mat.albedo_color = Color(0.38, 0.3, 0.22).lerp(Color(0.2, 0.5, 0.85), t)
+	if car_mat.albedo_texture != null:
+		car_mat.albedo_color = Color(0.5, 0.42, 0.34).lerp(Color.WHITE, t)
+	else:
+		car_mat.albedo_color = Color(0.38, 0.3, 0.22).lerp(Color(0.2, 0.5, 0.85), t)
 
 func _apply_story_vis() -> void:
 	_update_car()
@@ -2959,10 +2983,10 @@ func _tree_or(kind: String, x: float, z: float, h: float, sc := 1.0) -> void:
 		_tree(x, z, h)
 
 func _mailbox(x: float, z: float, ry: float) -> void:
-	_prop("lipovaya", "mailbox_street", Vector3(x, 0, z), ry, 0.7, 60.0)
+	_prop("lipovaya", "mailbox_street", Vector3(x, 0, z), ry, 0.7, 45.0)
 
 func _stall_m(model: String, x: float, z: float, face: float, col: Color, nm: String, hue: float) -> void:
-	var n := _prop("market", model, Vector3(x, 0, z), 0.0 if face > 0.0 else PI, 0.9, 110.0)
+	var n := _prop("market", model, Vector3(x, 0, z), 0.0 if face > 0.0 else PI, 0.9, 85.0)
 	if n == null:
 		_stall(x, z, face, col, nm, hue)
 		return
@@ -2970,11 +2994,36 @@ func _stall_m(model: String, x: float, z: float, face: float, col: Color, nm: St
 		var hh := 3.0
 		if n is MeshInstance3D:
 			hh = (n as MeshInstance3D).get_aabb().size.y
-		_label(nm, Vector3(x, hh + 0.6, z), 64, Color(1, 1, 1), 0.011)
+		_label(nm, Vector3(x, hh + 0.4, z), 56, Color(1, 1, 1), 0.01, 24.0)
 
 func _lamp_post(x: float, z: float) -> void:
-	_box(Vector3(x, 2.2, z), Vector3(0.16, 4.4, 0.16), Color(0.18, 0.2, 0.22))
-	_glow_box(Vector3(x, 4.6, z), Vector3(0.55, 0.4, 0.55), Color(1.0, 0.88, 0.55))
+	var pm := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.06
+	cm.bottom_radius = 0.1
+	cm.height = 4.4
+	cm.radial_segments = 8
+	pm.mesh = cm
+	pm.material_override = _mat(Color(0.16, 0.18, 0.2), 0.6)
+	pm.position = Vector3(x, 2.2, z)
+	pm.visibility_range_end = 90.0
+	add_child(pm)
+	var hm := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.3
+	sm.height = 0.6
+	sm.radial_segments = 10
+	sm.rings = 6
+	hm.mesh = sm
+	var em := _mat(Color(1.0, 0.9, 0.6), 0.5)
+	em.emission_enabled = true
+	em.emission = Color(1.0, 0.88, 0.55)
+	em.emission_energy_multiplier = 1.2
+	hm.material_override = em
+	hm.position = Vector3(x, 4.6, z)
+	hm.visibility_range_end = 90.0
+	add_child(hm)
+	_col_boxr(Vector3(x, 2.2, z), 0.0, Vector3.ZERO, Vector3(0.3, 4.4, 0.3), 0.0, 1.0)
 
 func _build_city() -> void:
 	# дорога от Липовой и площадь Сити
@@ -3001,7 +3050,7 @@ func _build_city() -> void:
 	_prop("city", "brick2", Vector3(-54, 0, -46.0), PI)
 	# фонтан и скамейки вокруг
 	_prop("city", "fountain", Vector3(-78, 0, -88), 0.0, 0.85)
-	_prop("city", "bench_old", Vector3(-71.2, 0, -88), -PI / 2.0, 0.9, 90.0)
+	_prop("city", "bench_old", Vector3(-71.2, 0, -88), -PI / 2.0, 0.9, 60.0)
 	_prop("city", "bench_old", Vector3(-84.8, 0, -88), PI / 2.0, 0.9, 90.0)
 	_prop("city", "bench_old", Vector3(-78, 0, -94.8), 0.0, 0.9, 90.0)
 	_prop("city", "bench_old", Vector3(-78, 0, -81.2), PI, 0.9, 90.0)
@@ -3011,9 +3060,9 @@ func _build_city() -> void:
 	_prop("heroshops", "bakery", Vector3(-35.6, 0, -66), -PI / 2.0)
 	_prop("heroshops", "delivery_point", Vector3(-35.6, 0, -114), -PI / 2.0)
 	_prop("heroshops", "skate_workshop", Vector3(-118.5, 0, -64), PI / 2.0)
-	_label("ПИРОЖКОВАЯ", Vector3(-35.6, 6.0, -66), 90, Color(1, 0.85, 0.2), 0.01)
-	_label("ПУНКТ ДОСТАВКИ", Vector3(-35.6, 5.6, -114), 90, Color(1, 0.85, 0.2), 0.01)
-	_label("МАСТЕРСКАЯ СКЕЙТОВ", Vector3(-118.5, 6.4, -64), 90, Color(1, 0.85, 0.2), 0.01)
+	_label("ПИРОЖКОВАЯ", Vector3(-35.6, 5.3, -66), 90, Color(1, 0.85, 0.2), 0.01, 60.0)
+	_label("ПУНКТ ДОСТАВКИ", Vector3(-35.6, 4.9, -114), 90, Color(1, 0.85, 0.2), 0.01, 60.0)
+	_label("МАСТЕРСКАЯ СКЕЙТОВ", Vector3(-118.5, 5.6, -64), 90, Color(1, 0.85, 0.2), 0.01, 60.0)
 	# деревья и фонари
 	var ck := ["tree_linden", "tree_maple", "tree_maple", "tree_linden", "tree_linden", "tree_maple"]
 	var cp := [Vector2(-92, -76), Vector2(-64, -76), Vector2(-92, -101), Vector2(-64, -101), Vector2(-92, -56), Vector2(-64, -56)]
@@ -3027,6 +3076,35 @@ func _build_city() -> void:
 # ---------- заборы и кусты ----------
 var bush_mesh: SphereMesh
 var bush_mats: Array = []
+
+func _yard_fence(p0: Vector2, p1: Vector2) -> void:
+	var along_z := absf(p1.x - p0.x) < 0.01
+	var l := absf(p1.y - p0.y) if along_z else absf(p1.x - p0.x)
+	var cnt := int(l / 0.3)
+	var c := (p0 + p1) * 0.5
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.1, 1.0, 0.04)
+	mm.mesh = bm
+	mm.instance_count = cnt
+	var bas := Basis(Vector3.UP, PI / 2.0) if along_z else Basis()
+	for i in range(cnt):
+		var t := (float(i) + 0.5) / float(cnt) - 0.5
+		var pos := Vector3(c.x, 0.5, c.y + t * l) if along_z else Vector3(c.x + t * l, 0.5, c.y)
+		mm.set_instance_transform(i, Transform3D(bas, pos))
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	var mt := _mat(Color(0.93, 0.89, 0.8))
+	mmi.material_override = mt
+	mmi.visibility_range_end = 110.0
+	add_child(mmi)
+	fence_mats.append(mt)
+	var rc := Color(0.85, 0.8, 0.7)
+	var rs := Vector3(0.05, 0.07, l) if along_z else Vector3(l, 0.07, 0.05)
+	_box(Vector3(c.x, 0.3, c.y), rs, rc, false)
+	_box(Vector3(c.x, 0.75, c.y), rs, rc, false)
+	_col_boxr(Vector3(c.x, 0.6, c.y), PI / 2.0 if along_z else 0.0, Vector3.ZERO, Vector3(l, 1.2, 0.15), 0.0, 1.0)
 
 func _picket(a: float, b: float, z: float) -> void:
 	var l := b - a
