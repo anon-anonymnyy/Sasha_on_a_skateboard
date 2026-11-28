@@ -152,6 +152,7 @@ func _load_save() -> void:
 		memos = data.get("memos", [])
 		debt_sum = int(data.get("debt_sum", 0))
 		shop2 = str(data.get("shop2", ""))
+		hero_t = int(data.get("hero_t", 0))
 		var st = data.get("stats", {})
 		if typeof(st) == TYPE_DICTIONARY:
 			for k in stats.keys():
@@ -181,7 +182,7 @@ func _save_now() -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
-	f.store_string(JSON.stringify({"coins": coins, "streak": streak, "last_day": last_day, "char": char_id, "tricks_open": tricks_open, "quest_i": quest_i, "owned": owned, "last_collect": last_collect, "story": story, "snd": snd_on, "gear": gear, "stones": stones, "balls": balls, "stats": stats, "debt_paid": debt_paid, "shop_id": shop_id, "rival_shop": rival_shop, "memos": memos, "debt_sum": debt_sum, "shop2": shop2}))
+	f.store_string(JSON.stringify({"coins": coins, "streak": streak, "last_day": last_day, "char": char_id, "tricks_open": tricks_open, "quest_i": quest_i, "owned": owned, "last_collect": last_collect, "story": story, "snd": snd_on, "gear": gear, "stones": stones, "balls": balls, "stats": stats, "debt_paid": debt_paid, "shop_id": shop_id, "rival_shop": rival_shop, "memos": memos, "debt_sum": debt_sum, "shop2": shop2, "hero_t": hero_t}))
 
 func _check_daily() -> void:
 	var today := int(Time.get_unix_time_from_system() / 86400.0)
@@ -748,6 +749,8 @@ func _hud_draw() -> void:
 		hud.draw_rect(Rect2(308, 58, 396.0 * frac, 8), Color(0.4, 0.9, 0.4), true)
 	hud.draw_rect(_btn_swap(), Color(0, 0, 0, 0.45), true)
 	_text_c("Сменить", _btn_swap().get_center(), 26)
+	if fade_until > Time.get_ticks_msec():
+		hud.draw_rect(Rect2(Vector2.ZERO, s), Color(0, 0, 0, clampf(float(fade_until - Time.get_ticks_msec()) / 500.0, 0.0, 1.0)))
 	hud.draw_rect(_btn_snd(), Color(0, 0, 0, 0.45), true)
 	_text_c("Звук" if snd_on else "Тихо", _btn_snd().get_center(), 24, Color.WHITE if snd_on else Color(1, 0.6, 0.6))
 	var mb := _btn_menu()
@@ -1310,6 +1313,8 @@ var my_shop_lb: Label3D
 var rival_lb: Label3D
 var spar_home := Vector3(41, 0.04, 6)
 var debt_sum := 0
+var hero_t := 0
+var fade_until := 0
 var shop2 := ""
 var shop2_lb: Label3D
 var race_pts: Array = []
@@ -3681,6 +3686,34 @@ func _m_process(d: float) -> void:
 			_reward(5000, "Конец истории!")
 			_set_step(38))
 
+func _switch_hero() -> void:
+	if dlg.size() > 0 or _roof_fight() or not race_pts.is_empty() or aiming:
+		_toast("Сейчас нельзя меняться")
+		return
+	_collect_income()
+	var now := int(Time.get_unix_time_from_system())
+	if hero_t > 0 and story >= 22:
+		var a := int(minf(float(now - hero_t) / 3600.0, MAX_OFFLINE_H) * 300.0)
+		if a > 0:
+			coins += a
+			_toast("Лавка второго Саши: +%d ₽" % a)
+	hero_t = now
+	var t := shop_id
+	shop_id = rival_shop
+	rival_shop = t
+	if my_shop_lb != null:
+		my_shop_lb.queue_free()
+		my_shop_lb = null
+	if rival_lb != null:
+		rival_lb.queue_free()
+		rival_lb = null
+	fade_until = Time.get_ticks_msec() + 700
+	_spawn_model("girl" if char_id == "boy" else "boy")
+	var fr: Vector3 = SHOP_FRONT[shop_id]
+	_teleport(Vector3(fr.x + 2.0, 0.5, fr.z))
+	_sfx("good")
+	_toast("Ты играешь за второго Сашу. Твоя лавка: " + str(SHOP_NAMES.get(shop_id, "")))
+
 const PARK_PT := Vector3(80, 0, 6)
 const WH_PT := Vector3(30, 0, 80)
 const PIER_PT := Vector3(2, 0, 96)
@@ -4412,7 +4445,10 @@ func _on_press(idx: int, p: Vector2) -> void:
 		menu_open = false
 		return
 	if _btn_swap().has_point(p):
-		state = "select"
+		if story >= 23 and shop_id != "":
+			_switch_hero()
+		else:
+			state = "select"
 		return
 	if act_id != "" and p.distance_to(_btn_act()) < 70:
 		_sfx("click")
