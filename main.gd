@@ -150,6 +150,8 @@ func _load_save() -> void:
 		shop_id = str(data.get("shop_id", ""))
 		rival_shop = str(data.get("rival_shop", ""))
 		memos = data.get("memos", [])
+		debt_sum = int(data.get("debt_sum", 0))
+		shop2 = str(data.get("shop2", ""))
 		var st = data.get("stats", {})
 		if typeof(st) == TYPE_DICTIONARY:
 			for k in stats.keys():
@@ -179,7 +181,7 @@ func _save_now() -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
-	f.store_string(JSON.stringify({"coins": coins, "streak": streak, "last_day": last_day, "char": char_id, "tricks_open": tricks_open, "quest_i": quest_i, "owned": owned, "last_collect": last_collect, "story": story, "snd": snd_on, "gear": gear, "stones": stones, "balls": balls, "stats": stats, "debt_paid": debt_paid, "shop_id": shop_id, "rival_shop": rival_shop, "memos": memos}))
+	f.store_string(JSON.stringify({"coins": coins, "streak": streak, "last_day": last_day, "char": char_id, "tricks_open": tricks_open, "quest_i": quest_i, "owned": owned, "last_collect": last_collect, "story": story, "snd": snd_on, "gear": gear, "stones": stones, "balls": balls, "stats": stats, "debt_paid": debt_paid, "shop_id": shop_id, "rival_shop": rival_shop, "memos": memos, "debt_sum": debt_sum, "shop2": shop2}))
 
 func _check_daily() -> void:
 	var today := int(Time.get_unix_time_from_system() / 86400.0)
@@ -613,8 +615,9 @@ func _spawn_model(id: String) -> void:
 			a.loop_mode = Animation.LOOP_LINEAR if (n in LOOPING) else Animation.LOOP_NONE
 	cur_anim = ""
 	_play("idle")
-	if rival != null:
+	if shop_id != "":
 		_spawn_rival()
+		_m_labels()
 	_save()
 
 func _attach_cap(id: String) -> void:
@@ -1055,7 +1058,20 @@ const OBJ := [
 	"Крыша",
 	"Вернись в штаб Крохина: там гости",
 	"Внеси первый взнос Крохину: %d ₽ (подойди к нему)",
-	"Акт 3 пройден! Долг по дому: %s ₽. Копи деньги: следующие взносы в Акте 4 (скоро)"]
+	"Акт 3 пройден! Долг по дому: %s ₽. Поговори с Крохиным",
+	"Вторая точка: купи ещё одну лавку в Сити за 8000 ₽",
+	"Команда: уговори Кешу и дядю Гошу помогать (%d/2)",
+	"Реклама: устрой шоу на борде в Скейт-парке (кнопка «→ Скейт-парк»)",
+	"Турнир на борде: проедь через все точки за %d с (%d/3)",
+	"Тётя Люда зовёт обоих: нужно срочно поговорить",
+	"Внеси второй взнос Крохину: 15000 ₽",
+	"Склад отца в порту: найди его по метке (кнопка «→ Порт»)",
+	"Разговор на причале: поговори с Сашей из Сити",
+	"Битва за рынок: Ревизор закрыла его на проверку! Отбейся от охраны (%d/3)",
+	"Последний трюк: успей к Крохину до полуночи, проедь все точки за %d с (%d/4)",
+	"Погаси остаток долга: %s ₽ (подойди к Крохину, платить можно частями)",
+	"Новый день: выйди на причал",
+	"Сюжет пройден! Копи деньги, развивай бизнес и катайся. Спасибо за игру"]
 const DLG := {
 	"prolog": [
 		["Саша", "Щёлк, щёлк… Света нет. Холодильник молчит, чайник молчит. Хоть кто-то в этом доме отдыхает."],
@@ -1187,6 +1203,81 @@ const DLG := {
 		["Саша", "Спасибо. Наверное."],
 		["Крохин", "Не благодарите. Договор есть договор. Остаток запишу."],
 		["Саша", "А в доме нашёл косяк с зарубками роста. Две колонки, и обе подписаны «Саша»."]],
+	"act4_start": [
+		["Крохин", "Первый взнос принят. Проходимость у вас растёт, я считал."],
+		["Крохин", "Предлагаю вторую точку: ещё лавка в Сити за восемь тысяч. Дешёвый рост это не рост, но и не убыток."],
+		["Саша", "Вы сами предлагаете мне расширяться?"],
+		["Крохин", "Должник, который зарабатывает, лучше должника, который ждёт чуда. Договор есть договор."]],
+	"shop2_ok": [
+		["Саша", "Две лавки! Теперь нужна команда."]],
+	"team_kesha": [
+		["Кеша", "Бизнес без команды как доска без колёс: красиво, но не едет. Я в деле."],
+		["Кеша", "Кстати, на оси твоей доски цифра «1». А где парная?"],
+		["Саша", "Какая ещё парная?"],
+		["Кеша", "Забудь, это я про своё."]],
+	"team_gosha": [
+		["Дядя Гоша", "Честная цена: помогу, если пирожки будешь привозить на рынок."],
+		["Саша", "Договорились."],
+		["Дядя Гоша", "И открытки с кораблями бери, пригодятся для рекламы."]],
+	"show1": [
+		["Саша", "Раз-два! Шоу на борде в честь наших лавок!"],
+		["Саша (Сити)", "Я тоже здесь. Двое на бордах это двойная реклама."],
+		["Зритель", "Вы одинаково катаетесь! Как отражение!"],
+		["Саша", "Совпадение."],
+		["Саша (Сити)", "Привычка. Мы оба стучим носком по доске."]],
+	"tourney1": [
+		["Судья", "Финал для пар! Нужна анкета с семейным фото."],
+		["Саша", "У меня только половинка."],
+		["Саша (Сити)", "У меня тоже половинка. Странно."],
+		["Судья", "Разберётесь после финала. Победа ваша!"]],
+	"reveal1": [
+		["Тётя Люда", "Саша, Саша. Я должна была сказать раньше. Вы родные. Близнецы."],
+		["Саша", "Что?!"],
+		["Саша (Сити)", "Нас разлучили?.."],
+		["Тётя Люда", "В два года. Бабушка не тянула двоих. Вот коробка с письмами родителей и ваши половинки."],
+		["Саша", "«Берегите...»"],
+		["Саша (Сити)", "«...друг друга». Вместе читается."],
+		["Саша", "Щёлк. Так вот почему у тебя те же привычки."],
+		["Саша (Сити)", "Выходит, ты мой родной. Деревня."],
+		["Саша", "Это взаимно."]],
+	"pay2": [
+		["Крохин", "Пятнадцать тысяч. Принято. Остаток записал."],
+		["Саша", "Вы очень спокойно это считаете."],
+		["Крохин", "Договор есть договор. Хотя последний год я бы не торопился."]],
+	"wh1": [
+		["Саша", "Папина мастерская катеров. Журнал рейса, письма... и ключ!"],
+		["Саша (Сити)", "Ключ от шкатулки. Люда всё это время её хранила."],
+		["Саша", "Он оставил нам чертежи. Для двоих."]],
+	"pier1": [
+		["Саша (Сити)", "У тебя был дом, а у меня тётя Рита и её долги. Я приехал продать долю."],
+		["Саша", "Я не знал. Прости."],
+		["Саша (Сити)", "Не извиняйся. Я зря злился. Доля остаётся у меня."],
+		["Саша", "И у меня. Пополам, как хотели родители."],
+		["Саша (Сити)", "Тогда вместе. Но «деревня» остаётся."]],
+	"market1": [
+		["Маргарита Павловна", "Рынок закрыт на проверку. Прошу покинуть территорию."],
+		["Саша", "Тут вся улица торгует! Дядя Гоша, собираемся!"],
+		["Маргарита Павловна", "Охрана, выведите их."]],
+	"market_win": [
+		["Маргарита Павловна", "Так. Бумаги есть бумаги. Но срок по долгу остаётся."],
+		["Дядя Гоша", "А пирожки у тёти Люды вкусные, да?"],
+		["Маргарита Павловна", "...Вкусные. Проверка продлена. Не радуйтесь."]],
+	"last1": [
+		["Саша", "Крохин закрывается в полночь! Бегом!"],
+		["Чайка Валера", "Кр-р-ра! (уносит папку с бумагами)"],
+		["Саша (Сити)", "Валера, верни! ...Вернул. Герой."],
+		["Саша", "Вперёд, к Крохину!"]],
+	"final1": [
+		["Крохин", "Долг закрыт. Договор есть договор. Рву залог."],
+		["Крохин", "Скажу честно: пятнадцать лет я продлевал срок. Из уважения к Виктору."],
+		["Саша", "Спасибо."],
+		["Крохин", "Не благодарите. Выходите на причал, вас ждут."]],
+	"final2": [
+		["Бабушка Нина", "Дети, простите меня. Я молчала, и мне было стыдно."],
+		["Саша (Сити)", "Бабушка, мы всё знаем. Мы вместе."],
+		["Саша", "Слышишь? Гудок!"],
+		["Саша (Сити)", "Корабль на горизонте."],
+		["Саша", "В письме: «Берегите друг друга». Мы беречь будем."]],
 	"krohin_wait": [
 		["Крохин", "Следующий взнос будет не скоро: рынок ещё не пережил проверку. Приходите, когда будете готовы."]]}
 
@@ -1218,6 +1309,12 @@ var m_prop: Node3D
 var my_shop_lb: Label3D
 var rival_lb: Label3D
 var spar_home := Vector3(41, 0.04, 6)
+var debt_sum := 0
+var shop2 := ""
+var shop2_lb: Label3D
+var race_pts: Array = []
+var race_t := 0.0
+var race_lim := 120.0
 
 func _smax() -> float:
 	var m := SKATE_MAX
@@ -1593,7 +1690,7 @@ func _act_press() -> void:
 			_start_dlg("light_ok")
 		else:
 			_toast("Не хватает: нужно %d ₽" % LIGHT_COST)
-	elif act_id.begins_with("shop:") or act_id == "open" or act_id == "pay1":
+	elif act_id.begins_with("shop:") or act_id in ["open", "pay1", "shop2", "pay2", "payall"]:
 		_m_act_press()
 	elif act_id.begins_with("talk:"):
 		_talk(act_id.substr(5))
@@ -3224,10 +3321,11 @@ func _fmt(n: int) -> String:
 	return o
 
 func _debt_left() -> int:
-	var t := DEBT_TOTAL
-	for i in range(mini(debt_paid, INSTALL.size())):
-		t -= int(INSTALL[i])
-	return t
+	var sm := debt_sum
+	if sm == 0:
+		for i in range(mini(debt_paid, INSTALL.size())):
+			sm += int(INSTALL[i])
+	return maxi(0, DEBT_TOTAL - sm)
 
 func _memo_unlock(n: int) -> void:
 	if n in memos:
@@ -3283,6 +3381,8 @@ func _spawn_rival() -> void:
 	npcs["rival"] = {"node": rival, "anim": an, "ry": ry}
 
 func _m_labels() -> void:
+	if shop2_lb == null and shop2 != "" and story >= 27:
+		shop2_lb = _label("ВТОРАЯ ЛАВКА", (SHOP_SPOTS[shop2] as Vector3) + Vector3(0, 7.2, 0), 80, Color(0.5, 1, 0.6), 0.01, 70.0)
 	if my_shop_lb == null and shop_id != "":
 		my_shop_lb = _label("МОЯ ЛАВКА", _my_shop_pos() + Vector3(0, 7.2, 0), 80, Color(0.5, 1, 0.6), 0.01, 70.0)
 	if rival_lb == null and rival_shop != "":
@@ -3295,6 +3395,20 @@ func _m_enter(i: int) -> void:
 	if roof_extra != null and i != 22:
 		roof_extra.queue_free()
 		roof_extra = null
+	if i == 29:
+		race_pts = [Vector3(33, 0.5, 2), Vector3(80, 0.5, 6), Vector3(0, 0.5, 6)]
+		race_lim = 120.0
+		race_t = race_lim
+	elif i == 35:
+		race_pts = [Vector3(-50, 0.5, 31), Vector3(0, 0.5, 6), Vector3(-5, 0.5, 66), Vector3(-78, 0.5, -54)]
+		race_lim = 150.0
+		race_t = race_lim
+	else:
+		race_pts = []
+	if i == 26 and shop2 == "":
+		for k in SHOP_SPOTS.keys():
+			if str(k) != shop_id and str(k) != rival_shop:
+				shop2 = str(k)
 	if i == 20 and m_prop == null:
 		m_prop = _prop("market", "pallets_tarp", PORT_CRATE, 0.4, 0.0, 120.0)
 		if m_prop == null:
@@ -3337,6 +3451,16 @@ func _m_obj() -> String:
 			return t % [int(INSTALL[0])]
 		25:
 			return t % [_fmt(_debt_left())]
+		27:
+			return t % [_bits(sp)]
+		29:
+			return t % [int(maxf(race_t, 0.0)), sp]
+		34:
+			return t % [clampi(sp - 1, 0, 3)]
+		35:
+			return t % [int(maxf(race_t, 0.0)), sp]
+		36:
+			return t % [_fmt(_debt_left())]
 	return t
 
 func _m_target() -> Variant:
@@ -3365,6 +3489,30 @@ func _m_target() -> Variant:
 				return _my_shop_pos()
 			if spar != null:
 				return spar.position
+		25, 31, 36:
+			return _npc_pos("krohin")
+		26:
+			return SHOP_SPOTS.get(shop2, SHOP_SPOTS["food"])
+		27:
+			if sp & 1 == 0:
+				return _npc_pos("kesha")
+			return _npc_pos("gosha")
+		28:
+			return PARK_PT
+		29, 35:
+			if sp < race_pts.size():
+				return race_pts[sp]
+		30:
+			return _npc_pos("lyuda")
+		32:
+			return WH_PT
+		33, 37:
+			return PIER_PT
+		34:
+			if sp == 0:
+				return MARKET_PT
+			if spar != null:
+				return spar.position
 	return null
 
 func _m_talk(id: String) -> bool:
@@ -3379,7 +3527,25 @@ func _m_talk(id: String) -> bool:
 	if story == 23 and id == "krohin":
 		_start_dlg("revizor1", func(): _set_step(24))
 		return true
-	if story >= 25 and id == "krohin":
+	if story == 25 and id == "krohin":
+		_start_dlg("act4_start", func(): _set_step(26))
+		return true
+	if story == 27:
+		if id == "kesha" and sp & 1 == 0:
+			sp |= 1
+			_start_dlg("team_kesha", func(): _team_check())
+			return true
+		if id == "gosha" and sp & 2 == 0:
+			sp |= 2
+			_start_dlg("team_gosha", func(): _team_check())
+			return true
+	if story == 30 and id == "lyuda":
+		_start_dlg("reveal1", func():
+			_memo_unlock(4)
+			_reward(1000, "Семья нашлась!")
+			_set_step(31))
+		return true
+	if story > 25 and id == "krohin" and story != 31 and story != 36:
 		_start_dlg("krohin_wait")
 		return true
 	return false
@@ -3394,6 +3560,18 @@ func _m_act_update(pp: Vector3) -> bool:
 	elif story == 21 and _flat_dist(pp, _my_shop_pos()) < 8.0:
 		act_id = "open"
 		act_label = "Включить"
+		return true
+	elif story == 26 and _flat_dist(pp, SHOP_SPOTS.get(shop2, SHOP_SPOTS["food"])) < 8.0:
+		act_id = "shop2"
+		act_label = "Купить"
+		return true
+	elif story == 31 and _flat_dist(pp, _npc_pos("krohin")) < 5.0:
+		act_id = "pay2"
+		act_label = "Взнос"
+		return true
+	elif story == 36 and _flat_dist(pp, _npc_pos("krohin")) < 5.0:
+		act_id = "payall"
+		act_label = "Платить"
 		return true
 	elif story == 24 and _flat_dist(pp, _npc_pos("krohin")) < 5.0:
 		act_id = "pay1"
@@ -3424,12 +3602,47 @@ func _m_act_press() -> void:
 			return
 		coins -= c
 		debt_paid = 1
+		debt_sum += c
 		_sfx("good")
 		_start_dlg("pay1", func():
 			_memo_unlock(3)
 			_set_step(25))
+	elif act_id == "shop2":
+		if coins < 8000:
+			_toast("Не хватает: нужно 8000 ₽")
+			return
+		coins -= 8000
+		_sfx("good")
+		_m_labels()
+		_start_dlg("shop2_ok", func(): _set_step(27))
+	elif act_id == "pay2":
+		var c2 := int(INSTALL[1])
+		if coins < c2:
+			_toast("Не хватает: нужно %d ₽" % c2)
+			return
+		coins -= c2
+		debt_paid = 2
+		debt_sum += c2
+		_sfx("good")
+		_start_dlg("pay2", func(): _set_step(32))
+	elif act_id == "payall":
+		var left := _debt_left()
+		var pay := mini(coins, left)
+		if pay <= 0:
+			_toast("Нет денег. Копи и приходи ещё")
+			return
+		coins -= pay
+		debt_sum += pay
+		debt_paid = 5 if _debt_left() == 0 else 3
+		_sfx("good")
+		_toast("Внесено %s ₽. Остаток %s ₽" % [_fmt(pay), _fmt(_debt_left())])
+		_save()
+		if _debt_left() == 0:
+			_start_dlg("final1", func(): _set_step(37))
 
 func _m_process(d: float) -> void:
+	if dlg.size() > 0:
+		return
 	var pp := player.global_position
 	if story == 20:
 		if sp == 0 and _flat_dist(pp, PORT_CRATE) < 3.2:
@@ -3446,17 +3659,80 @@ func _m_process(d: float) -> void:
 		sp = 1
 		_spawn_roof_thug()
 		_start_dlg("roof1")
+	elif story == 28 and _flat_dist(pp, PARK_PT) < 8.0:
+		_start_dlg("show1", func():
+			_reward(1500, "Отличное шоу!")
+			_set_step(29))
+	elif story == 29 or story == 35:
+		_race(d, pp)
+	elif story == 32 and _flat_dist(pp, WH_PT) < 4.0:
+		_start_dlg("wh1", func():
+			_memo_unlock(5)
+			_reward(1000, "Отцовский склад найден!")
+			_set_step(33))
+	elif story == 33 and _flat_dist(pp, PIER_PT) < 5.0:
+		_start_dlg("pier1", func(): _set_step(34))
+	elif story == 34 and sp == 0 and _flat_dist(pp, MARKET_PT) < 25.0:
+		sp = 1
+		_spawn_roof_thug()
+		_start_dlg("market1")
+	elif story == 37 and _flat_dist(pp, PIER_PT) < 5.0:
+		_start_dlg("final2", func():
+			_reward(5000, "Конец истории!")
+			_set_step(38))
+
+const PARK_PT := Vector3(80, 0, 6)
+const WH_PT := Vector3(30, 0, 80)
+const PIER_PT := Vector3(2, 0, 96)
+const MARKET_PT := Vector3(-50, 0, 31)
+
+func _bits(v: int) -> int:
+	return (v & 1) + ((v >> 1) & 1)
+
+func _team_check() -> void:
+	if sp & 3 == 3:
+		_reward(1000, "Команда собрана!")
+		_set_step(28)
+
+func _race(d: float, pp: Vector3) -> void:
+	if race_pts.is_empty() or sp >= race_pts.size():
+		return
+	race_t -= d
+	if _flat_dist(pp, race_pts[sp]) < 5.0:
+		sp += 1
+		_sfx("good")
+		if sp >= race_pts.size():
+			race_pts = []
+			if story == 29:
+				_start_dlg("tourney1", func():
+					_reward(2000, "Победа в турнире!")
+					_set_step(30))
+			else:
+				_start_dlg("last1", func():
+					_set_step(36))
+		return
+	if race_t <= 0.0:
+		race_t = race_lim
+		sp = 0
+		_toast("Время вышло! Попробуй ещё раз")
+
+func _roof_max() -> int:
+	return 3 if story == 34 else 2
 
 func _roof_fight() -> bool:
-	return story == 22 and (sp == 1 or sp == 2)
+	return (story == 22 or story == 34) and sp >= 1 and sp <= _roof_max()
 
 func _spawn_roof_thug() -> void:
-	var front: Vector3 = SHOP_FRONT.get(shop_id, SHOP_FRONT["food"])
-	var dirc := (Vector3(-78, 0, -88) - front)
-	dirc.y = 0.0
-	dirc = dirc.normalized()
-	spar_home = front + dirc * 6.0
-	spar_home.y = 0.04
+	if story == 34:
+		spar_home = player.global_position + Vector3(5, 0, 0)
+		spar_home.y = 0.04
+	else:
+		var front: Vector3 = SHOP_FRONT.get(shop_id, SHOP_FRONT["food"])
+		var dirc := (Vector3(-78, 0, -88) - front)
+		dirc.y = 0.0
+		dirc = dirc.normalized()
+		spar_home = front + dirc * 6.0
+		spar_home.y = 0.04
 	if spar != null:
 		spar.queue_free()
 	spar = _spawn_npc("npc_thug", "Подручный", spar_home, PI, false)
@@ -3465,19 +3741,24 @@ func _spawn_roof_thug() -> void:
 	spar_cd = 2.0
 	spar_wind = 0.0
 	spar_stun = 0.0
-	if roof_extra == null:
+	if story == 22 and roof_extra == null:
 		roof_extra = _spawn_npc("npc_biker", "Хмурый", spar_home + Vector3(3, 0, 2), PI, false)
 
 func _roof_down() -> void:
-	if sp == 1:
-		sp = 2
-		_toast("Один готов! Второй рядом!")
+	if sp < _roof_max():
+		sp += 1
+		_toast("Один готов! Следующий рядом!")
 		_spawn_roof_thug()
-	else:
-		sp = 3
+		return
+	sp = 9
+	if story == 22:
 		_start_dlg("roof_win", func():
 			_reward(700, "Крыша отбита!")
 			_set_step(23))
+	else:
+		_start_dlg("market_win", func():
+			_reward(1500, "Рынок спасён!")
+			_set_step(35))
 
 # ---------- заборы и кусты ----------
 var bush_mesh: SphereMesh
