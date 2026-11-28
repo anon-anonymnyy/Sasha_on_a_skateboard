@@ -146,6 +146,10 @@ func _load_save() -> void:
 		gear = data.get("gear", [])
 		stones = int(data.get("stones", 3))
 		balls = int(data.get("balls", 0))
+		debt_paid = int(data.get("debt_paid", 0))
+		shop_id = str(data.get("shop_id", ""))
+		rival_shop = str(data.get("rival_shop", ""))
+		memos = data.get("memos", [])
 		var st = data.get("stats", {})
 		if typeof(st) == TYPE_DICTIONARY:
 			for k in stats.keys():
@@ -175,7 +179,7 @@ func _save_now() -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return
-	f.store_string(JSON.stringify({"coins": coins, "streak": streak, "last_day": last_day, "char": char_id, "tricks_open": tricks_open, "quest_i": quest_i, "owned": owned, "last_collect": last_collect, "story": story, "snd": snd_on, "gear": gear, "stones": stones, "balls": balls, "stats": stats}))
+	f.store_string(JSON.stringify({"coins": coins, "streak": streak, "last_day": last_day, "char": char_id, "tricks_open": tricks_open, "quest_i": quest_i, "owned": owned, "last_collect": last_collect, "story": story, "snd": snd_on, "gear": gear, "stones": stones, "balls": balls, "stats": stats, "debt_paid": debt_paid, "shop_id": shop_id, "rival_shop": rival_shop, "memos": memos}))
 
 func _check_daily() -> void:
 	var today := int(Time.get_unix_time_from_system() / 86400.0)
@@ -609,6 +613,8 @@ func _spawn_model(id: String) -> void:
 			a.loop_mode = Animation.LOOP_LINEAR if (n in LOOPING) else Animation.LOOP_NONE
 	cur_anim = ""
 	_play("idle")
+	if rival != null:
+		_spawn_rival()
 	_save()
 
 func _attach_cap(id: String) -> void:
@@ -688,6 +694,8 @@ func _pr_row(i: int) -> Rect2:
 	return Rect2(_pr().position.x + 20, _pr().position.y + 150 + i * 66, 760, 58)
 func _pr_buy(i: int) -> Rect2:
 	return Rect2(_pr_row(i).end.x - 170, _pr_row(i).position.y + 6, 160, 46)
+func _btn_mem() -> Rect2:
+	return Rect2(_vs().x * 0.5 - 350, 86, 200, 56)
 func _btn_tp() -> Rect2:
 	return Rect2(_vs().x * 0.5 + 150, 86, 200, 56)
 func _btn_swap() -> Rect2:
@@ -728,6 +736,13 @@ func _hud_draw() -> void:
 	_text("%d ₽" % coins, Vector2(36, 60), 34, Color(1, 0.9, 0.3))
 	_text(_district(), Vector2(22, 100), 24, Color(1, 1, 1, 0.8))
 	_text("FPS %d  пик %d мс" % [Engine.get_frames_per_second(), int(ft_show * 1000.0)], Vector2(22, 130), 20, Color(1, 1, 1, 0.6))
+	if story >= 18:
+		var dl := _debt_left()
+		hud.draw_rect(Rect2(296, 20, 420, 56), Color(0, 0, 0, 0.45), true)
+		_text("Долг по дому: %s ₽" % _fmt(dl), Vector2(308, 48), 24, Color(1.0, 0.65, 0.6))
+		var frac := 1.0 - float(dl) / float(DEBT_TOTAL)
+		hud.draw_rect(Rect2(308, 58, 396, 8), Color(1, 1, 1, 0.2), true)
+		hud.draw_rect(Rect2(308, 58, 396.0 * frac, 8), Color(0.4, 0.9, 0.4), true)
 	hud.draw_rect(_btn_swap(), Color(0, 0, 0, 0.45), true)
 	_text_c("Сменить", _btn_swap().get_center(), 26)
 	hud.draw_rect(_btn_snd(), Color(0, 0, 0, 0.45), true)
@@ -747,6 +762,9 @@ func _hud_draw() -> void:
 		hud.draw_rect(_btn_tp(), Color(0.15, 0.35, 0.3, 0.8), true)
 		hud.draw_rect(_btn_tp(), Color(1, 1, 1, 0.6), false, 2.0)
 		_text_c("→ " + str((TP[tp_i % TP.size()] as Array)[0]), _btn_tp().get_center(), 22)
+		hud.draw_rect(_btn_mem(), Color(0.35, 0.2, 0.45, 0.8), true)
+		hud.draw_rect(_btn_mem(), Color(1, 1, 1, 0.6), false, 2.0)
+		_text_c("Память %d/5" % memos.size(), _btn_mem().get_center(), 22)
 	hud.draw_rect(Rect2(20, 148, 340, 100), Color(0, 0, 0, 0.45), true)
 	_text("ЗАДАНИЕ", Vector2(30, 170), 16, Color(1, 0.85, 0.3))
 	hud.draw_multiline_string(font, Vector2(30, 194), _obj_text(), HORIZONTAL_ALIGNMENT_LEFT, 320.0, 20, 3, Color.WHITE)
@@ -782,6 +800,8 @@ func _hud_draw() -> void:
 		_draw_house_panel(s)
 	if panel == "shop":
 		_draw_shop_panel(s)
+	if panel == "mem":
+		_draw_mem_panel(s)
 	if dlg.size() > 0:
 		_draw_dialog(s)
 	# ежедневная награда
@@ -842,6 +862,8 @@ func _income_h() -> int:
 			t += int(UPGRADES[i]["inc"])
 	if story >= 7:
 		t += 50
+	if shop_id != "" and story >= 22:
+		t += 300
 	return t
 
 func _pending_income() -> int:
@@ -999,7 +1021,8 @@ const NPC_DEF := {
 	"lyuda": {"file": "npc_granny", "name": "Тётя Люда", "pos": Vector3(-22, 0, -3), "ry": 0.0},
 	"gosha": {"file": "npc_shopkeeper", "name": "Дядя Гоша", "pos": Vector3(-50, 0, 41.6), "ry": PI},
 	"kesha": {"file": "npc_mechanic", "name": "Кеша", "pos": Vector3(-66, 0, -3), "ry": 0.0},
-	"pak": {"file": "npc_sensei", "name": "Тренер Пак", "pos": Vector3(31, 0, -3.2), "ry": 0.0}}
+	"pak": {"file": "npc_sensei", "name": "Тренер Пак", "pos": Vector3(31, 0, -3.2), "ry": 0.0},
+	"krohin": {"file": "npc_boss", "name": "Крохин", "pos": Vector3(-102, 0, -108.5), "ry": 0.0}}
 const SHOP := [
 	{"id": "wheels", "name": "Колёса", "desc": "+1 к максимальной скорости", "cost": 500},
 	{"id": "bearings", "name": "Подшипники", "desc": "+1,5 к максимальной скорости", "cost": 1500},
@@ -1024,7 +1047,15 @@ const OBJ := [
 	"Принеси тренеру Паку %d ₽ за форму и абонемент",
 	"Спарринг! Победи подручного: бей «Ударом», отойди, когда он замахнулся",
 	"Вернись к тренеру Паку",
-	"Сборка 4 пройдена! Копи деньги, улучшай дом, катайся, стреляй из рогатки"]
+	"Письмо: Крохин ждёт тебя в штабе Сити (кнопка «→ Сити»)",
+	"Выбери лавку в Сити и открой своё дело за %d ₽: подойди к лавке и нажми кнопку",
+	"К соседней лавке приехал новый арендатор. Поговори с ним",
+	"Закупка",
+	"Открытие: подойди к своей лавке и включи свет",
+	"Крыша",
+	"Вернись в штаб Крохина: там гости",
+	"Внеси первый взнос Крохину: %d ₽ (подойди к нему)",
+	"Акт 3 пройден! Долг по дому: %s ₽. Копи деньги: следующие взносы в Акте 4 (скоро)"]
 const DLG := {
 	"prolog": [
 		["Саша", "Щёлк, щёлк… Света нет. Холодильник молчит, чайник молчит. Хоть кто-то в этом доме отдыхает."],
@@ -1091,7 +1122,73 @@ const DLG := {
 	"hi_gosha": [
 		["Дядя Гоша", "Заходи, Саша! Работы пока нет, но скоро будет. Рынок любит расторопных."]],
 	"hi_lyuda": [
-		["Тётя Люда", "Здравствуй, Саша! Кушать хочешь? Шучу, у тебя же скейт, ты на нём всё время едешь."]]}
+		["Тётя Люда", "Здравствуй, Саша! Кушать хочешь? Шучу, у тебя же скейт, ты на нём всё время едешь."]],
+	"hi_krohin": [
+		["Крохин", "Считаю проходимость. Не мешайте, пожалуйста. Договор есть договор."]],
+	"hi_rival": [
+		["Саша (Сити)", "Чего смотришь, деревня? Работай, не отвлекай."]],
+	"krohin1": [
+		["Крохин", "Саша Ветров? Проходите. Я Крохин. Считать умею, врать нет."],
+		["Саша", "Здравствуйте. Мне передали, что вы меня искали."],
+		["Крохин", "Не вас, а ваш дом на Липовой. Он под залогом, долг тянется пятнадцать лет. Остаток триста тысяч рублей."],
+		["Саша", "Триста тысяч?! Мне только свет включили!"],
+		["Крохин", "Погасите пятью взносами: пять тысяч, пятнадцать, сорок, сто и сто сорок. Договор есть договор."],
+		["Крохин", "И ещё. Дом записан на двоих. Второго совладельца назвать не могу: тайна клиента. Я не лгу, но и не болтаю."],
+		["Саша", "Какого ещё совладельца?.."],
+		["Крохин", "Срок долга до дня вашего восемнадцатилетия. В конверте то, что вам оставили. Желаю успехов."]],
+	"shop_ok": [
+		["Саша", "Лавка моя. Ну, пока в аренду. Но зато на моём месте."],
+		["Саша", "Вывеску повесить, дверь покрасить, товар найти. Работы много, а время идёт."]],
+	"rival1": [
+		["Саша (Сити)", "Эй, деревня. Это моя лавка по соседству. Не мешай."],
+		["Саша", "Какая ещё деревня? Я тут всю жизнь живу. А ты вообще кто?"],
+		["Саша (Сити)", "Саша. Не смотри так, имя как имя."],
+		["Саша", "Ха. Я тоже Саша. Совпадение."],
+		["Саша (Сити)", "Ладно, соседи. Только цены не сбивать. И за товаром едем в порт, ящик один на двоих."]],
+	"port1": [
+		["Саша", "Вот он, ящик. Ого, тяжёлый."],
+		["Саша (Сити)", "Стоп. Это мой ящик. Я заказал первый."],
+		["Саша", "На накладной моё имя. Саша."],
+		["Саша (Сити)", "И на моей Саша. Тут два «Саши» в списке, кто-то что-то напутал."],
+		["Саша", "Давай пополам, и без драки."],
+		["Чайка Валера", "Кр-р-ра! (хватает пирожки у обоих и улетает)"],
+		["Саша (Сити)", "Мои пирожки! Валера, вернись!"],
+		["Саша", "Бесполезно. Несём ящик в Сити."]],
+	"port2": [
+		["Саша", "Ящик на месте. Половина товара моя, половина соседа. Зато без драки."],
+		["Саша", "Теперь открываться. Включу свет, и можно торговать."]],
+	"open1": [
+		["Саша", "Ну что, включаем."],
+		["Саша", "Щёлк!"],
+		["Саша (Сити)", "Щёлк! ...Стоп. Ты тоже так делаешь?"],
+		["Саша", "Что «так»?"],
+		["Саша (Сити)", "Забудь. Совпадение. Привычка."],
+		["Саша", "Первая выручка есть! А в коробке под прилавком нашёлся рисунок: дом и четыре фигуры."]],
+	"roof1": [
+		["Хмурый", "Хорошая лавка у вас. Стоила бы дороже, если б её охраняли. Мы с ребятами берём под защиту."],
+		["Саша", "Мы не заказывали."],
+		["Хмурый", "Все так говорят. Подручный, покажи, что такое защита."],
+		["Саша (Сити)", "Деревня, слева. Я справа."],
+		["Саша", "Договорились. Только без «деревни»."]],
+	"roof_win": [
+		["Хмурый", "Ладно-ладно, уходим. Слушайте, а откуда пирожки? Такие, как у тёти Люды?"],
+		["Саша", "Это секрет."],
+		["Саша (Сити)", "Секрет. Но расскажем, если отстанете."],
+		["Саша", "Эй, а ты неплохо бьёшь."],
+		["Саша (Сити)", "Ты тоже. Не привыкай."]],
+	"revizor1": [
+		["Маргарита Павловна", "Господин Крохин, «Север-Инвест» выкупил долг по дому на Липовой. Мне нужен отчёт."],
+		["Крохин", "Маргарита Павловна, договор действует до восемнадцатилетия владельца. Раньше срока дом не взыскать."],
+		["Маргарита Павловна", "Тогда я проверю рынок. Участок под торговый центр уже согласован."],
+		["Саша", "Рынок?! Там дядя Гоша и вся улица!"],
+		["Крохин", "Честно, молодой человек: срок ваше восемнадцатилетие. Либо долг закрыт, либо две подписи владельцев. Первый взнос можно внести сегодня."]],
+	"pay1": [
+		["Крохин", "Пять тысяч. Принято. Выписываю квитанцию."],
+		["Саша", "Спасибо. Наверное."],
+		["Крохин", "Не благодарите. Договор есть договор. Остаток запишу."],
+		["Саша", "А в доме нашёл косяк с зарубками роста. Две колонки, и обе подписаны «Саша»."]],
+	"krohin_wait": [
+		["Крохин", "Следующий взнос будет не скоро: рынок ещё не пережил проверку. Приходите, когда будете готовы."]]}
 
 var story := 0
 var sp := 0
@@ -1111,6 +1208,16 @@ var tp_i := 1
 var menu_open := false
 var thug: Node3D
 var thug_wp := 1
+var debt_paid := 0
+var shop_id := ""
+var rival_shop := ""
+var memos: Array = []
+var rival: Node3D
+var roof_extra: Node3D
+var m_prop: Node3D
+var my_shop_lb: Label3D
+var rival_lb: Label3D
+var spar_home := Vector3(41, 0.04, 6)
 
 func _smax() -> float:
 	var m := SKATE_MAX
@@ -1120,7 +1227,7 @@ func _smax() -> float:
 		m += 1.5
 	return m
 
-func _label(t: String, pos: Vector3, fs: int, c: Color, px := 0.012, vis := 0.0) -> void:
+func _label(t: String, pos: Vector3, fs: int, c: Color, px := 0.012, vis := 0.0) -> Label3D:
 	var lb := Label3D.new()
 	if vis > 0.0:
 		lb.visibility_range_end = vis
@@ -1132,6 +1239,7 @@ func _label(t: String, pos: Vector3, fs: int, c: Color, px := 0.012, vis := 0.0)
 	lb.modulate = c
 	lb.outline_modulate = Color(0.1, 0.1, 0.1)
 	add_child(lb)
+	return lb
 
 func _glow_box(pos: Vector3, size: Vector3, c: Color) -> void:
 	var b := _box(pos, size, c, false)
@@ -1315,6 +1423,7 @@ func _set_step(i: int) -> void:
 	elif spar != null:
 		spar.queue_free()
 		spar = null
+	_m_enter(i)
 	_apply_story_vis()
 	_save()
 
@@ -1339,6 +1448,8 @@ func _apply_story_vis() -> void:
 		_glow_box(Vector3(3.5, 2.9, -3.0), Vector3(0.5, 0.4, 0.5), Color(1, 0.95, 0.6))
 
 func _story_target() -> Variant:
+	if story >= 17:
+		return _m_target()
 	match story:
 		12, 14, 16:
 			return _npc_pos("pak")
@@ -1365,6 +1476,8 @@ func _story_target() -> Variant:
 	return null
 
 func _obj_text() -> String:
+	if story >= 17:
+		return _m_obj()
 	var t: String = OBJ[mini(story, OBJ.size() - 1)]
 	match story:
 		2, 5:
@@ -1402,6 +1515,8 @@ func _dlg_next() -> void:
 			cb.call()
 
 func _talk(id: String) -> void:
+	if story >= 17 and _m_talk(id):
+		return
 	if story == 0 and id == "lyuda":
 		_set_step(1)
 		_start_dlg("prolog")
@@ -1453,6 +1568,8 @@ func _act_update() -> void:
 	elif story == 6 and _flat_dist(pp, DOOR_POS) < 3.5:
 		act_id = "pay"
 		act_label = "Свет"
+	elif story >= 17 and _m_act_update(pp):
+		pass
 	else:
 		for id in npcs.keys():
 			var n: Node3D = npcs[id]["node"]
@@ -1476,6 +1593,8 @@ func _act_press() -> void:
 			_start_dlg("light_ok")
 		else:
 			_toast("Не хватает: нужно %d ₽" % LIGHT_COST)
+	elif act_id.begins_with("shop:") or act_id == "open" or act_id == "pay1":
+		_m_act_press()
 	elif act_id.begins_with("talk:"):
 		_talk(act_id.substr(5))
 
@@ -1483,6 +1602,9 @@ func _story_process(d: float) -> void:
 	if dlg.size() > 0 or player == null:
 		return
 	var pp := player.global_position
+	if story >= 17:
+		_m_process(d)
+		return
 	if story == 2:
 		var tp: Vector3 = L_PTS[sp]
 		if _flat_dist(pp, tp) < 3.0:
@@ -1615,7 +1737,7 @@ func _draw_dialog(s: Vector2) -> void:
 	hud.draw_rect(r, Color(1, 0.85, 0.3), false, 3.0)
 	var line: Array = dlg[dlg_i]
 	var who := str(line[0])
-	var col := Color(0.6, 0.85, 1) if who == "Саша" else Color(1, 0.85, 0.35)
+	var col := Color(0.6, 0.85, 1) if who == "Саша" else (Color(0.6, 1, 0.75) if who.begins_with("Саша (") else Color(1, 0.85, 0.35))
 	if who != "":
 		_text(who, Vector2(r.position.x + 24, r.position.y + 40), 30, col)
 	hud.draw_multiline_string(font, Vector2(r.position.x + 24, r.position.y + 84), str(line[1]), HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 48, 26, 4, Color.WHITE)
@@ -2496,6 +2618,7 @@ func _npc_anim(n: Node3D, a: String) -> void:
 func _spawn_spar() -> void:
 	if spar != null:
 		spar.queue_free()
+	spar_home = SPAR_START
 	spar = _spawn_npc("npc_thug", "Подручный", SPAR_START, PI, false)
 	spar_hp = 50.0
 	php = 100.0
@@ -2517,7 +2640,7 @@ func _fight_hit() -> void:
 			_start_dlg("pak2")
 		else:
 			_toast("Удар по мешку: %d/10" % sp)
-	elif story == 15 and spar != null and dlg.size() == 0 and _flat_dist(pp, spar.position) < 2.7:
+	elif (story == 15 or _roof_fight()) and spar != null and dlg.size() == 0 and _flat_dist(pp, spar.position) < 2.7:
 		var dv := spar.position - pp
 		heading = atan2(dv.x, dv.z)
 		spar_hp -= 10.0 if punch_n % 2 == 1 else 14.0
@@ -2527,8 +2650,11 @@ func _fight_hit() -> void:
 		spar_wind = 0.0
 		if spar_hp <= 0.0:
 			_npc_anim(spar, "fall")
-			_set_step(16)
-			_start_dlg("spar_win")
+			if story == 15:
+				_set_step(16)
+				_start_dlg("spar_win")
+			else:
+				_roof_down()
 		else:
 			_npc_anim(spar, "land")
 
@@ -2537,7 +2663,7 @@ func _fight_update(d: float) -> void:
 	if bag_pivot != null:
 		bag_sway = maxf(0.0, bag_sway - d * 0.6)
 		bag_pivot.rotation.z = sin(bag_t * 9.0) * bag_sway * 0.35
-	if story != 15 or spar == null or dlg.size() > 0 or player == null:
+	if not (story == 15 or _roof_fight()) or spar == null or dlg.size() > 0 or player == null:
 		return
 	var pp := player.global_position
 	var dv := pp - spar.position
@@ -2559,7 +2685,7 @@ func _fight_update(d: float) -> void:
 			if php <= 0.0:
 				php = 100.0
 				spar_hp = 50.0
-				spar.position = SPAR_START
+				spar.position = spar_home
 				spar_cd = 2.5
 				_toast("Не вышло! Тренер Пак: «Соберись и ещё раз!»")
 		return
@@ -2575,7 +2701,7 @@ func _fight_update(d: float) -> void:
 			_npc_anim(spar, "punch" if randi() % 2 == 0 else "kick")
 
 func _draw_fight(s: Vector2) -> void:
-	if story != 15 or spar == null or dlg.size() > 0:
+	if not (story == 15 or _roof_fight()) or spar == null or dlg.size() > 0:
 		return
 	var w := 360.0
 	var x0 := s.x * 0.5 - w * 0.5
@@ -3072,6 +3198,286 @@ func _build_city() -> void:
 		_lamp_post((lp as Vector2).x, (lp as Vector2).y)
 	# скамейка и ящик у въезда
 	_prop("lipovaya", "bench_modern", Vector3(-85, 0, -40), PI / 2.0, 0.9, 80.0)
+
+# ---------- Акт 3: долг, воспоминания, миссии 13-18 ----------
+const DEBT_TOTAL := 300000
+const INSTALL := [5000, 15000, 40000, 100000, 140000]
+const SHOP_COST := 3000
+const SHOP_SPOTS := {"food": Vector3(-35.6, 0, -66), "delivery": Vector3(-35.6, 0, -114), "skate": Vector3(-118.5, 0, -64)}
+const SHOP_FRONT := {"food": Vector3(-41.5, 0, -66), "delivery": Vector3(-41.5, 0, -114), "skate": Vector3(-112.5, 0, -64)}
+const SHOP_NAMES := {"food": "Пирожковая", "delivery": "Пункт доставки", "skate": "Мастерская скейтов"}
+const PORT_CRATE := Vector3(6.0, 0, 74.0)
+const MEMOS := [
+	["Половинка фото", "Малыш и чьи-то руки. На обороте: «Берегите…»"],
+	["Детский рисунок", "Дом и четыре фигуры: «папа, мама, Саша, Саша»."],
+	["Зарубки роста", "На косяке две колонки, обе подписаны «Саша». Высоты почти совпадают."],
+	["Модель корабля", "Название рейса выцвело. Папа собирал её сам."],
+	["Ключ от шкатулки", "Маленький ключ. Что он открывает, пока неясно."]]
+
+func _fmt(n: int) -> String:
+	var t := str(absi(n))
+	var o := ""
+	for i in range(t.length()):
+		if i > 0 and (t.length() - i) % 3 == 0:
+			o += " "
+		o += t[i]
+	return o
+
+func _debt_left() -> int:
+	var t := DEBT_TOTAL
+	for i in range(mini(debt_paid, INSTALL.size())):
+		t -= int(INSTALL[i])
+	return t
+
+func _memo_unlock(n: int) -> void:
+	if n in memos:
+		return
+	memos.append(n)
+	_toast("Воспоминание: " + str((MEMOS[n - 1] as Array)[0]))
+	_sfx("good")
+	_save()
+
+func _draw_mem_panel(s: Vector2) -> void:
+	hud.draw_rect(Rect2(Vector2.ZERO, s), Color(0, 0, 0, 0.6))
+	var pr := _pr()
+	hud.draw_rect(pr, Color(0.2, 0.22, 0.32), true)
+	hud.draw_rect(pr, Color(1, 0.85, 0.3), false, 4.0)
+	_text_c("Воспоминания", Vector2(pr.get_center().x, pr.position.y + 40), 38)
+	hud.draw_rect(_pr_close(), Color(0.7, 0.2, 0.2), true)
+	_text_c("Закрыть", _pr_close().get_center(), 20)
+	for i in range(MEMOS.size()):
+		var r := Rect2(pr.position.x + 20, pr.position.y + 80 + i * 80, 760, 72)
+		hud.draw_rect(r, Color(0.28, 0.3, 0.45), true)
+		var m: Array = MEMOS[i]
+		if (i + 1) in memos:
+			_text(str(m[0]), Vector2(r.position.x + 14, r.position.y + 28), 24, Color(1, 0.9, 0.4))
+			hud.draw_multiline_string(font, Vector2(r.position.x + 14, r.position.y + 54), str(m[1]), HORIZONTAL_ALIGNMENT_LEFT, 730.0, 20, 2, Color.WHITE)
+		else:
+			_text("???", Vector2(r.position.x + 14, r.position.y + 42), 26, Color(1, 1, 1, 0.5))
+
+func _my_shop_pos() -> Vector3:
+	return SHOP_SPOTS.get(shop_id, SHOP_SPOTS["food"])
+
+func _nearest_shop(pp: Vector3, maxd := 8.0) -> String:
+	var best := ""
+	var bd := maxd
+	for k in SHOP_SPOTS.keys():
+		var dd := _flat_dist(pp, SHOP_SPOTS[k])
+		if dd < bd:
+			bd = dd
+			best = str(k)
+	return best
+
+func _spawn_rival() -> void:
+	if rival != null:
+		rival.queue_free()
+		rival = null
+	npcs.erase("rival")
+	if shop_id == "" or rival_shop == "":
+		return
+	var f := "sasha_girl" if char_id == "boy" else "sasha_boy"
+	var pos: Vector3 = SHOP_FRONT[rival_shop]
+	var ry := PI / 2.0 if rival_shop == "skate" else -PI / 2.0
+	rival = _spawn_npc(f, "Саша", pos, ry, true)
+	var an := rival.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	npcs["rival"] = {"node": rival, "anim": an, "ry": ry}
+
+func _m_labels() -> void:
+	if my_shop_lb == null and shop_id != "":
+		my_shop_lb = _label("МОЯ ЛАВКА", _my_shop_pos() + Vector3(0, 7.2, 0), 80, Color(0.5, 1, 0.6), 0.01, 70.0)
+	if rival_lb == null and rival_shop != "":
+		rival_lb = _label("ЛАВКА САШИ", (SHOP_SPOTS[rival_shop] as Vector3) + Vector3(0, 7.2, 0), 80, Color(1, 0.7, 0.4), 0.01, 70.0)
+
+func _m_enter(i: int) -> void:
+	if m_prop != null and i != 20:
+		m_prop.queue_free()
+		m_prop = null
+	if roof_extra != null and i != 22:
+		roof_extra.queue_free()
+		roof_extra = null
+	if i == 20 and m_prop == null:
+		m_prop = _prop("market", "pallets_tarp", PORT_CRATE, 0.4, 0.0, 120.0)
+		if m_prop == null:
+			m_prop = Node3D.new()
+			m_prop.position = PORT_CRATE
+			var bm := MeshInstance3D.new()
+			var bx := BoxMesh.new()
+			bx.size = Vector3(1.4, 1.2, 1.4)
+			bm.mesh = bx
+			bm.material_override = _mat(Color(0.6, 0.45, 0.25))
+			bm.position = Vector3(0, 0.6, 0)
+			m_prop.add_child(bm)
+			add_child(m_prop)
+		var lb := Label3D.new()
+		lb.text = "ЯЩИК"
+		lb.font_size = 56
+		lb.pixel_size = 0.012
+		lb.position = Vector3(0, 2.6, 0)
+		lb.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+		lb.modulate = Color(1, 0.85, 0.3)
+		lb.outline_modulate = Color(0.1, 0.1, 0.1)
+		m_prop.add_child(lb)
+	if shop_id != "" and i >= 19:
+		if rival == null:
+			_spawn_rival()
+		_m_labels()
+
+func _m_obj() -> String:
+	var t: String = OBJ[mini(story, OBJ.size() - 1)]
+	match story:
+		18:
+			return t % [SHOP_COST]
+		20:
+			return "Закупка: забери ящик в порту (кнопка «→ Порт»)" if sp == 0 else "Отнеси ящик в свою лавку в Сити"
+		22:
+			if sp == 0:
+				return "Подойди к своей лавке: к ней идёт бригада Хмурого"
+			return "Отбейся от бригады Хмурого! (%d/2)" % [clampi(sp - 1, 0, 2)]
+		24:
+			return t % [int(INSTALL[0])]
+		25:
+			return t % [_fmt(_debt_left())]
+	return t
+
+func _m_target() -> Variant:
+	match story:
+		17, 23, 24:
+			return _npc_pos("krohin")
+		18:
+			var pp := player.global_position if player != null else Vector3.ZERO
+			var best := "food"
+			var bd := 1e9
+			for k in SHOP_SPOTS.keys():
+				var dd := _flat_dist(pp, SHOP_SPOTS[k])
+				if dd < bd:
+					bd = dd
+					best = str(k)
+			return SHOP_SPOTS[best]
+		19:
+			if rival != null:
+				return rival.position
+		20:
+			return PORT_CRATE if sp == 0 else _my_shop_pos()
+		21:
+			return _my_shop_pos()
+		22:
+			if sp == 0:
+				return _my_shop_pos()
+			if spar != null:
+				return spar.position
+	return null
+
+func _m_talk(id: String) -> bool:
+	if story == 17 and id == "krohin":
+		_start_dlg("krohin1", func():
+			_memo_unlock(1)
+			_set_step(18))
+		return true
+	if story == 19 and id == "rival":
+		_start_dlg("rival1", func(): _set_step(20))
+		return true
+	if story == 23 and id == "krohin":
+		_start_dlg("revizor1", func(): _set_step(24))
+		return true
+	if story >= 25 and id == "krohin":
+		_start_dlg("krohin_wait")
+		return true
+	return false
+
+func _m_act_update(pp: Vector3) -> bool:
+	if story == 18:
+		var k := _nearest_shop(pp)
+		if k != "":
+			act_id = "shop:" + k
+			act_label = "Открыть здесь"
+			return true
+	elif story == 21 and _flat_dist(pp, _my_shop_pos()) < 8.0:
+		act_id = "open"
+		act_label = "Включить"
+		return true
+	elif story == 24 and _flat_dist(pp, _npc_pos("krohin")) < 5.0:
+		act_id = "pay1"
+		act_label = "Взнос"
+		return true
+	return false
+
+func _m_act_press() -> void:
+	if act_id.begins_with("shop:"):
+		if coins < SHOP_COST:
+			_toast("Не хватает: нужно %d ₽" % SHOP_COST)
+			return
+		coins -= SHOP_COST
+		shop_id = act_id.substr(5)
+		rival_shop = "delivery" if shop_id != "delivery" else "food"
+		_sfx("good")
+		_set_step(19)
+		_start_dlg("shop_ok")
+	elif act_id == "open":
+		_start_dlg("open1", func():
+			_reward(800, "Первая выручка!")
+			_memo_unlock(2)
+			_set_step(22))
+	elif act_id == "pay1":
+		var c := int(INSTALL[0])
+		if coins < c:
+			_toast("Не хватает: нужно %d ₽" % c)
+			return
+		coins -= c
+		debt_paid = 1
+		_sfx("good")
+		_start_dlg("pay1", func():
+			_memo_unlock(3)
+			_set_step(25))
+
+func _m_process(d: float) -> void:
+	var pp := player.global_position
+	if story == 20:
+		if sp == 0 and _flat_dist(pp, PORT_CRATE) < 3.2:
+			sp = 1
+			if m_prop != null:
+				m_prop.queue_free()
+				m_prop = null
+			_start_dlg("port1")
+		elif sp == 1 and _flat_dist(pp, _my_shop_pos()) < 8.0:
+			_reward(500, "Товар доставлен!")
+			_set_step(21)
+			_start_dlg("port2")
+	elif story == 22 and sp == 0 and _flat_dist(pp, _my_shop_pos()) < 10.0:
+		sp = 1
+		_spawn_roof_thug()
+		_start_dlg("roof1")
+
+func _roof_fight() -> bool:
+	return story == 22 and (sp == 1 or sp == 2)
+
+func _spawn_roof_thug() -> void:
+	var front: Vector3 = SHOP_FRONT.get(shop_id, SHOP_FRONT["food"])
+	var dirc := (Vector3(-78, 0, -88) - front)
+	dirc.y = 0.0
+	dirc = dirc.normalized()
+	spar_home = front + dirc * 6.0
+	spar_home.y = 0.04
+	if spar != null:
+		spar.queue_free()
+	spar = _spawn_npc("npc_thug", "Подручный", spar_home, PI, false)
+	spar_hp = 50.0
+	php = 100.0
+	spar_cd = 2.0
+	spar_wind = 0.0
+	spar_stun = 0.0
+	if roof_extra == null:
+		roof_extra = _spawn_npc("npc_biker", "Хмурый", spar_home + Vector3(3, 0, 2), PI, false)
+
+func _roof_down() -> void:
+	if sp == 1:
+		sp = 2
+		_toast("Один готов! Второй рядом!")
+		_spawn_roof_thug()
+	else:
+		sp = 3
+		_start_dlg("roof_win", func():
+			_reward(700, "Крыша отбита!")
+			_set_step(23))
 
 # ---------- заборы и кусты ----------
 var bush_mesh: SphereMesh
@@ -3696,6 +4102,10 @@ func _on_press(idx: int, p: Vector2) -> void:
 	if panel == "shop":
 		_shop_press(p)
 		return
+	if panel == "mem":
+		if _pr_close().has_point(p) or not _pr().has_point(p):
+			panel = ""
+		return
 	if _btn_snd().has_point(p):
 		snd_on = not snd_on
 		_snd_apply()
@@ -3708,6 +4118,10 @@ func _on_press(idx: int, p: Vector2) -> void:
 		return
 	if menu_open and _btn_house().has_point(p):
 		panel = "house"
+		menu_open = false
+		return
+	if menu_open and _btn_mem().has_point(p):
+		panel = "mem"
 		menu_open = false
 		return
 	if menu_open and _btn_tp().has_point(p):
